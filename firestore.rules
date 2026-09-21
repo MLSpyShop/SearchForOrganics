@@ -1,0 +1,123 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // --- Global Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Default Deny ---
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- User Profiles ---
+    match /userProfiles/{userId} {
+      // Public profiles are readable by signed in users for forums/groups/DMs
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+
+    // --- Company Profiles ---
+    match /companyProfiles/{companyId} {
+      allow read: if true; // Public company and farm directory
+      allow create: if isSignedIn() && incoming().ownerUid == request.auth.uid;
+      allow update: if isSignedIn() && (existing().ownerUid == request.auth.uid || incoming().ownerUid == request.auth.uid);
+      allow delete: if isSignedIn() && existing().ownerUid == request.auth.uid;
+    }
+
+    // --- Forum Topics ---
+    match /forumTopics/{topicId} {
+      allow read: if true; // Public forum browsing
+      allow create: if isSignedIn() && incoming().authorUid == request.auth.uid;
+      allow update: if isSignedIn(); // For author edits or community upvoting
+      allow delete: if isSignedIn() && existing().authorUid == request.auth.uid;
+    }
+
+    // --- Forum Replies ---
+    match /forumReplies/{replyId} {
+      allow read: if true;
+      allow create: if isSignedIn() && incoming().authorUid == request.auth.uid;
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn() && existing().authorUid == request.auth.uid;
+    }
+
+    // --- User Groups ---
+    match /userGroups/{groupId} {
+      allow read: if true; // Public group exploration
+      allow create: if isSignedIn() && incoming().createdByUid == request.auth.uid;
+      allow update: if isSignedIn(); // Joining / leaving or admin edits
+      allow delete: if isSignedIn() && existing().createdByUid == request.auth.uid;
+    }
+
+    // --- Group Messages ---
+    match /groupMessages/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && incoming().senderUid == request.auth.uid;
+      allow update, delete: if isSignedIn() && existing().senderUid == request.auth.uid;
+    }
+
+    // --- Direct Message Conversations ---
+    match /dmConversations/{conversationId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid in resource.data.participantUids
+      );
+      allow create: if isSignedIn() && (
+        request.auth.uid in incoming().participantUids
+      );
+      allow update: if isSignedIn() && (
+        request.auth.uid in existing().participantUids ||
+        request.auth.uid in incoming().participantUids
+      );
+    }
+
+    // --- Direct Messages ---
+    match /directMessages/{messageId} {
+      allow read: if isSignedIn() && (
+        resource.data.senderUid == request.auth.uid ||
+        resource.data.receiverUid == request.auth.uid
+      );
+      allow create: if isSignedIn() && incoming().senderUid == request.auth.uid;
+      allow update: if isSignedIn() && (
+        existing().receiverUid == request.auth.uid || 
+        existing().senderUid == request.auth.uid
+      );
+      allow delete: if isSignedIn() && existing().senderUid == request.auth.uid;
+    }
+
+    // --- Saved Results (Bookmarks) ---
+    match /savedResults/{savedId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update: if isSignedIn() && existing().userId == request.auth.uid;
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+
+    // --- User Private Settings (Allergies, Vegan Preferences, Private Diet Guard) ---
+    match /userPrivateSettings/{userId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // --- Search History ---
+    match /searchHistory/{searchId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+      allow update: if false;
+    }
+  }
+}

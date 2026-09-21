@@ -1,0 +1,11 @@
+{
+  "name": "Search For Organics",
+  "description": "The official search engine and community ecosystem for discovering certified organic products and services. Features user profiles with custom usernames, community forums, user groups, company profiles, saved search memory, direct messaging, and AI purity auditing.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

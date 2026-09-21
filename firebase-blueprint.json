@@ -1,0 +1,237 @@
+{
+  "entities": {
+    "userProfiles": {
+      "title": "User Profile",
+      "description": "Stores custom username, personal bio, organic role, preferences, and profile details",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique Firebase Auth ID" },
+        "username": { "type": "string", "description": "Unique chosen @handle" },
+        "displayName": { "type": "string", "description": "Full name or alias" },
+        "email": { "type": "string", "description": "User email address" },
+        "photoURL": { "type": "string", "description": "Avatar image URL" },
+        "bio": { "type": "string", "description": "User bio or organic mission statement" },
+        "role": { "type": "string", "description": "e.g., Organic Consumer, Certified Farmer, Chemist, Brand Founder" },
+        "location": { "type": "string", "description": "City, State or Region" },
+        "dietaryFocus": { "type": "array", "items": { "type": "string" }, "description": "e.g., Biodynamic, Non-GMO, Regenerative" },
+        "companyId": { "type": "string", "description": "Linked company profile ID if applicable" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "username", "displayName", "email", "createdAt", "updatedAt"]
+    },
+    "companyProfiles": {
+      "title": "Company Profile",
+      "description": "Verified organic farms, brands, labs, certifiers, and co-ops",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ownerUid": { "type": "string", "description": "User ID of creator/manager" },
+        "name": { "type": "string", "description": "Company or Farm name" },
+        "handle": { "type": "string", "description": "Unique company handle" },
+        "category": { "type": "string", "description": "Farm, Brand, Lab, Certifier, Co-op, Retailer" },
+        "description": { "type": "string", "description": "Mission, philosophy, and background" },
+        "logoUrl": { "type": "string" },
+        "bannerUrl": { "type": "string" },
+        "website": { "type": "string" },
+        "location": { "type": "string" },
+        "contactEmail": { "type": "string" },
+        "phone": { "type": "string" },
+        "foundedYear": { "type": "number" },
+        "certifications": { "type": "array", "items": { "type": "string" } },
+        "verifiedStatus": { "type": "string", "enum": ["bob-verified", "certified", "pending", "community-listed"] },
+        "soilPractices": { "type": "string" },
+        "acreage": { "type": "string" },
+        "productHighlights": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "ownerUid", "name", "category", "createdAt", "updatedAt"]
+    },
+    "forumTopics": {
+      "title": "Forum Topic",
+      "description": "Community discussion threads across organic categories",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string", "description": "Category slug or channel name" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorUsername": { "type": "string" },
+        "authorAvatar": { "type": "string" },
+        "authorRole": { "type": "string" },
+        "upvotesCount": { "type": "number" },
+        "upvotedBy": { "type": "array", "items": { "type": "string" } },
+        "repliesCount": { "type": "number" },
+        "pinned": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "category", "title", "content", "authorUid", "createdAt"]
+    },
+    "forumReplies": {
+      "title": "Forum Reply",
+      "description": "Responses and discussions inside a forum topic",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "topicId": { "type": "string" },
+        "content": { "type": "string" },
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorUsername": { "type": "string" },
+        "authorAvatar": { "type": "string" },
+        "authorRole": { "type": "string" },
+        "upvotesCount": { "type": "number" },
+        "upvotedBy": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "topicId", "content", "authorUid", "createdAt"]
+    },
+    "userGroups": {
+      "title": "User Group",
+      "description": "Specialized organic interest groups with real-time group chat",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "handle": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "icon": { "type": "string" },
+        "isPrivate": { "type": "boolean" },
+        "createdByUid": { "type": "string" },
+        "memberUids": { "type": "array", "items": { "type": "string" } },
+        "membersCount": { "type": "number" },
+        "rules": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "category", "createdByUid", "createdAt"]
+    },
+    "groupMessages": {
+      "title": "Group Chat Message",
+      "description": "Real-time chat messages inside user groups",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "groupId": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderUsername": { "type": "string" },
+        "senderAvatar": { "type": "string" },
+        "senderRole": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "groupId", "senderUid", "text", "timestamp"]
+    },
+    "directMessages": {
+      "title": "Direct Message",
+      "description": "Direct 1-on-1 private messaging between users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "receiverUid": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "read": { "type": "boolean" }
+      },
+      "required": ["id", "conversationId", "senderUid", "receiverUid", "text", "timestamp"]
+    },
+    "dmConversations": {
+      "title": "Direct Message Conversation",
+      "description": "Metadata for 1-on-1 direct message conversations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "participantUids": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "type": "string" },
+        "lastMessageTimestamp": { "type": "string", "format": "date-time" },
+        "lastSenderUid": { "type": "string" }
+      },
+      "required": ["id", "participantUids"]
+    },
+    "savedResults": {
+      "title": "Saved Result / Bookmark",
+      "description": "Bookmarked organic products, farms, and directory items",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "vendor": { "type": "string" },
+        "purity": { "type": "number" },
+        "certifications": { "type": "array", "items": { "type": "string" } },
+        "price": { "type": "string" },
+        "description": { "type": "string" },
+        "folder": { "type": "string" },
+        "notes": { "type": "string" },
+        "savedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "productName", "savedAt"]
+    },
+    "searchHistory": {
+      "title": "Search History",
+      "description": "Stores user search history with re-query and filtering capabilities",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "query": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "resultsCount": { "type": "number" },
+        "category": { "type": "string" }
+      },
+      "required": ["userId", "query", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/userProfiles/{userId}": {
+      "schema": "userProfiles",
+      "description": "Public and personal user profiles"
+    },
+    "/companyProfiles/{companyId}": {
+      "schema": "companyProfiles",
+      "description": "Organic company and farm directory"
+    },
+    "/forumTopics/{topicId}": {
+      "schema": "forumTopics",
+      "description": "Public community forum threads"
+    },
+    "/forumReplies/{replyId}": {
+      "schema": "forumReplies",
+      "description": "Public replies to forum topics"
+    },
+    "/userGroups/{groupId}": {
+      "schema": "userGroups",
+      "description": "Organic community groups"
+    },
+    "/groupMessages/{messageId}": {
+      "schema": "groupMessages",
+      "description": "Group chat message streams"
+    },
+    "/dmConversations/{conversationId}": {
+      "schema": "dmConversations",
+      "description": "1-on-1 DM conversation channels"
+    },
+    "/directMessages/{messageId}": {
+      "schema": "directMessages",
+      "description": "Private direct messages"
+    },
+    "/savedResults/{savedId}": {
+      "schema": "savedResults",
+      "description": "User saved bookmarks and favorites"
+    },
+    "/searchHistory/{searchId}": {
+      "schema": "searchHistory",
+      "description": "Personal search history log"
+    }
+  }
+}
