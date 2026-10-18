@@ -16,12 +16,6 @@ function getGeminiClient(req: express.Request): GoogleGenAI | null {
   if (!userKey || userKey === 'undefined' || userKey === 'null' || userKey === 'your_gemini_api_key_here' || userKey.length < 8) {
     return null;
   }
-
-  // Tokens starting with 'AQ.' (Antigravity Agent internal tokens) or 'ya29.' (OAuth access tokens)
-  // cannot be passed as apiKey to generativelanguage.googleapis.com and will trigger 401 ACCESS_TOKEN_TYPE_UNSUPPORTED.
-  if (userKey.startsWith("AQ.") || userKey.startsWith("ya29.")) {
-    return null;
-  }
   
   try {
     return new GoogleGenAI({ 
