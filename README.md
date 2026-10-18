@@ -1,226 +1,126 @@
 # Search For Organics
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-pytest-brightgreen.svg)](https://docs.pytest.org/)
+A modern React + TypeScript app for discovering organic products, farms, and eco-conscious businesses. The project blends search, AI-assisted recommendations, local discovery, and community/business tooling into a single experience for organic living.
 
-Search For Organics is a focused machine learning project for detecting and searching for "organic" products from images and product metadata. It provides reference training code, evaluation script[...]
+## Overview
 
-This README has been expanded with concrete examples, a recommended baseline configuration, and a minimal API example — replace dataset/model paths and any API keys with your project-specific val[...]
+Search For Organics is built as a Vite-powered web app with a Node/Express server and Gemini-based AI services. It includes:
 
-## Quick links
+- organic product and business discovery
+- AI-powered summaries and recommendations
+- local search and category-based browsing
+- scanner and barcode workflows
+- farm, sustainability, and nutrition insights
+- community and business tools for organic brands and operators
 
-- Repository: https://github.com/MLSpyShop/Search-For-Organics
-- Website: https://mlspyshop.github.io/Search-For-Organics/
-- README (this file): README.md
+## Tech stack
 
-## Features
+- Frontend: React 19, TypeScript, Vite
+- Styling: Tailwind CSS
+- AI: Google Gemini via `@google/genai`
+- Backend: Express server (`server.ts`)
+- Data/platform: Firebase + Firestore
+- UX: Framer Motion, lucide-react
 
-- Image classifier to detect organic vs non-organic items (baseline: ResNet-50)
-- Text search over product metadata (keyword + embedding-based similarity)
-- Training and evaluation scripts with configurable YAML-based configs
-- Minimal FastAPI server for serving image predictions
-- Example configs, tests, and reproducible run instructions
+## Key features
+
+- Organic directory and product search
+- AI nutrition scanner and product insights
+- Barcode scanner and scan-based workflows
+- Community and user profile experiences
+- Produce swap, farm map, and route exploration
+- Carbon credit, compliance, business audit, and marketing tools
+- SEO and developer API utilities
 
 ## Repository layout
 
-- data/                - datasets (images, metadata CSVs)
-- src/                 - training, models, inference, and search code
-- api/                 - minimal FastAPI server
-- configs/             - example YAML configs (resnet50.yaml, default.yaml)
-- notebooks/           - EDA and experiment notebooks
-- models/              - saved checkpoints and artifacts
-- scripts/             - data download, preprocessing, helpers
-- tests/               - pytest tests
+- `App.tsx` — main application shell and high-level screen orchestration
+- `src/components/` — feature modules and UI sections
+- `src/services/` — app services and integrations
+- `src/lib/` and `src/utils/` — helpers and utility logic
+- `src/data/` and `src/content/` — static data and content
+- `services/geminiService.ts` — Gemini service integration
+- `server.ts` — Express server entry point
+- `firebase-applet-config.json` / `firebase-blueprint.json` — Firebase configuration assets
+- `firestore.rules` — Firestore security rules
+- `.env.example` — environment variable template
 
-## Getting started
+## Prerequisites
 
-Requirements
+- Node.js 18+
+- npm or Bun
+- A Gemini API key
 
-- Python 3.8+
-- Recommended: virtualenv or conda
+## Quick start
 
-Install
-
-```bash
-python -m venv .venv
-source .venv/bin/activate    # macOS / Linux
-.\.venv\Scripts\activate   # Windows
-pip install -r requirements.txt
-```
-
-If you plan to use GPU acceleration, install the appropriate PyTorch/torchaudio/torchvision build for your CUDA version (see https://pytorch.org).
-
-Data layout (recommended)
-
-```
-data/
-  images/
-    train/
-      organic/
-      non_organic/
-    val/
-      organic/
-      non_organic/
-  metadata/
-    products.csv   # product_id,title,description,organic_label (0/1)
-```
-
-If your data lives on S3/GCS, set the `data_root` config to a mounted path or adapt `scripts/load_data.py`.
-
-Baseline configuration (configs/resnet50.yaml)
-
-```yaml
-model:
-  name: resnet50
-  pretrained: true
-  num_classes: 2
-
-dataset:
-  input_size: 224
-  mean: [0.485, 0.456, 0.406]
-  std: [0.229, 0.224, 0.225]
-
-training:
-  epochs: 30
-  batch_size: 32
-  lr: 1e-3
-  weight_decay: 1e-4
-  optimizer: adam
-  scheduler:
-    name: cosine
-
-augmentations:
-  - RandomResizedCrop
-  - RandomHorizontalFlip
-  - ColorJitter
-
-data:
-  train_dir: data/images/train
-  val_dir: data/images/val
-```
-
-Quick start — training
+1. Install dependencies:
 
 ```bash
-# train with the baseline resnet50 config
-python src/train.py --config configs/resnet50.yaml --device cuda:0
+npm install
 ```
 
-Training options (common)
-
-- `--config`: YAML config file path
-- `--data-dir`: override dataset root
-- `--epochs`: number of epochs
-- `--batch-size`: batch size
-- `--checkpoint`: load a checkpoint for fine-tuning or evaluation
-
-Evaluation
+2. Create your environment file:
 
 ```bash
-python src/evaluate.py --checkpoint models/best.pt --data-dir data/images
+cp .env.example .env
 ```
 
-This will print accuracy, precision, recall, F1, and save confusion matrix and ROC/PR curves to `runs/`.
+Update `.env` with your keys:
 
-Inference examples
+```env
+VITE_GEMINI_API_KEY=your_client_key
+GEMINI_API_KEY=your_server_key
+```
 
-- CLI image prediction
+3. Run the app in development mode:
 
 ```bash
-python src/infer.py --image examples/apple.jpg --checkpoint models/best.pt
-# Output: {"label": "organic", "score": 0.92}
+npm run dev
 ```
 
-- Local API (FastAPI) — minimal example
-
-Create `api/main.py` (example provided in repo). Run:
+4. Build for production:
 
 ```bash
-uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+npm run build
 ```
 
-Then POST JSON to `http://localhost:8000/predict` with body:
+5. Start the production server:
+
+```bash
+npm run start
+```
+
+## Scripts
 
 ```json
-{ "image_url": "https://.../apple.jpg" }
+{
+  "dev": "tsx server.ts",
+  "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+  "start": "node dist/server.cjs",
+  "lint": "tsc --noEmit"
+}
 ```
 
-Response example:
+## Environment notes
 
-```json
-{ "label": "organic", "score": 0.92 }
-```
+- `VITE_GEMINI_API_KEY` is used in browser/client-side builds.
+- `GEMINI_API_KEY` is used by the server-side Node/Express runtime.
+- If you deploy to GitHub Pages or a static host, keep the client key limited to public-safe usage.
 
-Minimal FastAPI server (api/main.py) — reference
+## Development notes
 
-```python
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import Optional
+- The app is organized around feature-rich React sections rather than a single monolithic page.
+- Several components are designed for product discovery, compliance, sustainability analytics, and brand tools.
+- Firebase and Gemini configuration should be validated before production deployment.
 
-app = FastAPI()
+## Contributing
 
-class PredictRequest(BaseModel):
-    image_url: Optional[str]
+Contributions are welcome. For improvements, please open a pull request with a clear summary of:
 
-@app.post('/predict')
-async def predict(req: PredictRequest):
-    if not req.image_url:
-        raise HTTPException(status_code=400, detail='image_url required')
-    # Example flow: download image, preprocess, run model, return label+score
-    # Replace with model loading and real inference
-    return {"label": "organic", "score": 0.92}
-```
+- what changed
+- why it was needed
+- any setup or environment updates required
 
-Text search
+## Project status
 
-The repo includes a text search module that supports two modes:
-
-- Keyword filtering: find product metadata rows where `title` or `description` contains organic-related keywords (e.g. "organic", "certified organic", "USDA organic").
-- Embedding similarity: embed descriptions with a small sentence transformer and run nearest-neighbor search for semantic matches.
-
-Example CLI:
-
-```bash
-python src/search_text.py --query "organic apple" --metadata data/metadata/products.csv
-```
-
-Testing
-
-Run unit/integration tests with pytest:
-
-```bash
-pytest -q
-```
-
-CI
-
-Add a GitHub Actions workflow `.github/workflows/python-app.yml` that runs the test suite and lints the code on push/PR.
-
-Development tips
-
-- Use a reproducible experiments folder `runs/` for logs, checkpoints, and plots.
-- Log experiments with Weights & Biases, TensorBoard, or plain CSVs for reproducibility.
-- Save model metadata and training hyperparameters alongside checkpoints.
-
-Files you might want to add next
-
-- configs/resnet50.yaml (example provided above)
-- api/main.py (FastAPI server example)
-- LICENSE (MIT) — adding a LICENSE file is recommended
-- CONTRIBUTING.md with PR checklist
-
-License
-
-This project is distributed under the MIT License. See the included LICENSE file for details.
-
-Acknowledgments
-
-- Baseline backbones: ImageNet-pretrained ResNet models
-- Example ideas inspired by open-source model-zoo projects
-
-Maintainers & Contact
-
-- MLSpyShop team
-- For questions or help, open an issue in this repository.
+This repository is a functional, feature-rich web application for organic product discovery and community tools. It is actively structured around a React frontend, Express backend, and Gemini-powered intelligence features.
