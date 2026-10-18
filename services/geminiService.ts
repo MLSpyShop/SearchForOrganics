@@ -39,6 +39,15 @@ export const searchOrganicProducts = async (
   return response.json();
 };
 
+export const fetchGoogleSearchData = async (query: string): Promise<any> => {
+  const response = await fetch(`/api/google-search-data?q=${encodeURIComponent(query)}`);
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || "Failed to fetch Google Search data");
+  }
+  return response.json();
+};
+
 export const geocodeLocation = async (locationName: string, apiKey?: string): Promise<{ lat: number, lng: number, name: string }> => {
   const headers = getValidHeaders(apiKey);
 

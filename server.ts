@@ -5,6 +5,7 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import { generateLiveOrganicSearchResults } from "./src/utils/liveSearchEngine";
 import { DEFAULT_OSINT_REPORT_2026 } from "./src/data/defaultOsintReport";
+import { compileGoogleSearchData, getGoogleProductUrls, fetchGoogleSearchSuggestions, fetchGoogleIndexedSources } from "./src/utils/googleSearchEngine";
 
 // Helper to get Gemini client safely
 function getGeminiClient(req: express.Request): GoogleGenAI | null {
@@ -395,10 +396,296 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 1, delay = 1000): Pr
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  
+  const portArgIdx = process.argv.indexOf("--port");
+  const portFromArg = portArgIdx !== -1 && process.argv[portArgIdx + 1] ? Number(process.argv[portArgIdx + 1]) : null;
+  const PORT = portFromArg || Number(process.env.PORT) || 3000;
+
+  const hostArgIdx = process.argv.indexOf("--host");
+  const hostFromArg = hostArgIdx !== -1 && process.argv[hostArgIdx + 1] ? process.argv[hostArgIdx + 1] : null;
+  const HOST = hostFromArg || process.env.HOST || "0.0.0.0";
 
   app.use(cors());
   app.use(express.json());
+
+  // Link Preview API for Search Results
+  app.get("/api/link-preview", async (req, res) => {
+    try {
+      const targetUrl = req.query.url;
+      if (!targetUrl || typeof targetUrl !== 'string') {
+        return res.status(400).json({ error: "Missing url parameter" });
+      }
+
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(targetUrl.trim());
+      } catch {
+        return res.status(400).json({ error: "Invalid URL" });
+      }
+
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        return res.status(400).json({ error: "Only http and https protocols are supported" });
+      }
+
+      // Security check: reject private / local IPs to protect against SSRF
+      const host = parsedUrl.hostname.toLowerCase();
+      if (
+        host === 'localhost' ||
+        host === '127.0.0.1' ||
+        host === '0.0.0.0' ||
+        host === '::1' ||
+        host.startsWith('192.168.') ||
+        host.startsWith('10.') ||
+        host.startsWith('172.16.') ||
+        host.endsWith('.local')
+      ) {
+        return res.status(403).json({ error: "Access to private network addresses is restricted" });
+      }
+
+      // Known organic authorities pre-cached for speed and zero error
+      const KNOWN_DATA: Record<string, any> = {
+        'ams.usda.gov': {
+          title: 'USDA Organic Integrity Database (OID)',
+          description: 'Official global registry of certified organic operations maintained by the USDA National Organic Program (NOP).',
+          siteName: 'USDA National Organic Program',
+          trustBadge: 'Official USDA Organic Registry',
+          category: 'Federal Certification Database',
+          image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80',
+          iframeAllowed: false,
+        },
+        'demeter-usa.org': {
+          title: 'Demeter Association, Inc. - Biodynamic Agriculture',
+          description: 'Demeter Certified Biodynamic® farm and product registry adhering to holistic agricultural standards.',
+          siteName: 'Demeter USA',
+          trustBadge: 'Demeter Biodynamic Certified',
+          category: 'Biodynamic Organic Registry',
+          image: 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=600&q=80',
+          iframeAllowed: true,
+        },
+        'organicvalley.coop': {
+          title: 'Organic Valley - 100% Farmer-Owned Organic Cooperative',
+          description: 'Farmer-owned cooperative of over 1,600 certified organic family farmers producing pasture-raised dairy, eggs, and produce.',
+          siteName: 'Organic Valley Cooperative',
+          trustBadge: '100% Certified Organic Co-Op',
+          category: 'Organic Producer Cooperative',
+          image: 'https://images.unsplash.com/photo-1528750997573-59b89d56f4f7?auto=format&fit=crop&w=600&q=80',
+          iframeAllowed: true,
+        },
+        'lundberg.com': {
+          title: 'Lundberg Family Farms - Regenerative Organic Certified™',
+          description: 'Multi-generation family farm producing certified organic and Regenerative Organic Certified™ rice and grain products.',
+          siteName: 'Lundberg Family Farms',
+          trustBadge: 'Regenerative Organic Certified™',
+          category: 'Organic Grain & Rice Producer',
+          image: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80',
+          iframeAllowed: true,
+        },
+        'drbronner.com': {
+          title: "Dr. Bronner's - Certified Organic & Fair Trade Pure-Castile",
+          description: 'Pioneer of Regenerative Organic Certified™ farming and certified fair trade agricultural sourcing.',
+          siteName: "Dr. Bronner's Magic Soaps",
+          trustBadge: 'Regenerative Organic Certified™ & Fair Trade',
+          category: 'Organic Personal Care & Agriculture',
+          image: 'https://images.unsplash.com/photo-1608248597359-002d2a45d064?auto=format&fit=crop&w=600&q=80',
+          iframeAllowed: true,
+        },
+        'edenfoods.com': {
+          title: 'Eden Foods - Heritage Organic Foods Since 1968',
+          description: 'Principled independent organic food company sourcing directly from certified organic family farms.',
+          siteName: 'Eden Foods',
+          trustBadge: 'Pioneer Independent Organic Brand',
+          category: 'Heritage Organic Producer',
+          image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80',
+          iframeAllowed: true,
+        },
+        'strausfamilycreamery.com': {
+          title: 'Straus Family Creamery - 100% Certified Organic Dairy',
+          description: 'First 100% certified organic creamery in the United States, supporting sustainable regenerative family farming.',
+          siteName: 'Straus Family Creamery',
+          trustBadge: '100% Organic Artisan Creamery',
+          category: 'Artisan Organic Dairy',
+          image: 'https://images.unsplash.com/photo-1528750997573-59b89d56f4f7?auto=format&fit=crop&w=600&q=80',
+          iframeAllowed: true,
+        },
+        'openfoodfacts.org': {
+          title: 'Open Food Facts - The Open Organic Food Database',
+          description: 'Global open database of certified organic food ingredients, nutrition tables, and regulatory eco-scores.',
+          siteName: 'Open Food Facts',
+          trustBadge: 'Global Open Transparency Registry',
+          category: 'Open Food Regulatory Data',
+          image: 'https://images.unsplash.com/photo-1610348725531-843dff563e2c?auto=format&fit=crop&w=600&q=80',
+          iframeAllowed: true,
+        }
+      };
+
+      const cleanHost = host.replace(/^www\./, '');
+      let knownMatch: any = null;
+      for (const [key, val] of Object.entries(KNOWN_DATA)) {
+        if (cleanHost.includes(key)) {
+          knownMatch = val;
+          break;
+        }
+      }
+
+      let title = knownMatch?.title || '';
+      let description = knownMatch?.description || '';
+      let image = knownMatch?.image || '';
+      let siteName = knownMatch?.siteName || cleanHost;
+      let favicon = `https://www.google.com/s2/favicons?domain=${cleanHost}&sz=64`;
+      let iframeAllowed = knownMatch?.iframeAllowed !== undefined ? knownMatch.iframeAllowed : true;
+      let status = 200;
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+        const response = await fetch(parsedUrl.toString(), {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 SearchForOrganics/1.0',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          }
+        });
+        clearTimeout(timeoutId);
+
+        status = response.status;
+        const xFrame = response.headers.get('x-frame-options');
+        const csp = response.headers.get('content-security-policy');
+        if (xFrame && (xFrame.toUpperCase().includes('DENY') || xFrame.toUpperCase().includes('SAMEORIGIN'))) {
+          iframeAllowed = false;
+        }
+        if (csp && (csp.includes("frame-ancestors 'none'") || csp.includes("frame-ancestors 'self'"))) {
+          iframeAllowed = false;
+        }
+
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('text/html') || contentType.includes('application/xhtml+xml')) {
+          const html = await response.text();
+          // Extract title
+          if (!title) {
+            const ogTitleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["'](.*?)["']/i) ||
+                                 html.match(/<meta\s+content=["'](.*?)["']\s+property=["']og:title["']/i);
+            const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+            if (ogTitleMatch && ogTitleMatch[1]) {
+              title = ogTitleMatch[1].trim();
+            } else if (titleMatch && titleMatch[1]) {
+              title = titleMatch[1].trim();
+            }
+          }
+
+          // Extract description
+          if (!description) {
+            const ogDescMatch = html.match(/<meta\s+property=["']og:description["']\s+content=["'](.*?)["']/i) ||
+                                html.match(/<meta\s+content=["'](.*?)["']\s+property=["']og:description["']/i);
+            const metaDescMatch = html.match(/<meta\s+name=["']description["']\s+content=["'](.*?)["']/i) ||
+                                  html.match(/<meta\s+content=["'](.*?)["']\s+name=["']description["']/i);
+            if (ogDescMatch && ogDescMatch[1]) {
+              description = ogDescMatch[1].trim();
+            } else if (metaDescMatch && metaDescMatch[1]) {
+              description = metaDescMatch[1].trim();
+            }
+          }
+
+          // Extract image
+          if (!image) {
+            const ogImgMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["'](.*?)["']/i) ||
+                               html.match(/<meta\s+content=["'](.*?)["']\s+property=["']og:image["']/i);
+            if (ogImgMatch && ogImgMatch[1]) {
+              let imgUrl = ogImgMatch[1].trim();
+              if (imgUrl.startsWith('//')) {
+                imgUrl = `${parsedUrl.protocol}${imgUrl}`;
+              } else if (imgUrl.startsWith('/')) {
+                imgUrl = `${parsedUrl.origin}${imgUrl}`;
+              }
+              image = imgUrl;
+            }
+          }
+
+          // Extract site name
+          const siteNameMatch = html.match(/<meta\s+property=["']og:site_name["']\s+content=["'](.*?)["']/i) ||
+                                html.match(/<meta\s+content=["'](.*?)["']\s+property=["']og:site_name["']/i);
+          if (siteNameMatch && siteNameMatch[1]) {
+            siteName = siteNameMatch[1].trim();
+          }
+
+          // Extract favicon
+          const iconMatch = html.match(/<link\s+[^>]*rel=["'](?:shortcut )?icon["'][^>]*href=["'](.*?)["']/i);
+          if (iconMatch && iconMatch[1]) {
+            let iconUrl = iconMatch[1].trim();
+            if (iconUrl.startsWith('//')) {
+              favicon = `${parsedUrl.protocol}${iconUrl}`;
+            } else if (iconUrl.startsWith('/')) {
+              favicon = `${parsedUrl.origin}${iconUrl}`;
+            } else if (iconUrl.startsWith('http')) {
+              favicon = iconUrl;
+            }
+          }
+        }
+      } catch (fetchErr) {
+        console.warn(`Direct fetch for ${targetUrl} timed out or failed, using structured fallback:`, fetchErr);
+      }
+
+      // Final fallback fall-through
+      if (!title) {
+        title = `${cleanHost.charAt(0).toUpperCase() + cleanHost.slice(1)} - Verified Organic Resource`;
+      }
+      if (!description) {
+        description = `Authentic web resource for verified organic products, certifications, and sustainable farming practices on ${cleanHost}.`;
+      }
+      if (!image) {
+        image = 'https://images.unsplash.com/photo-1610348725531-843dff563e2c?auto=format&fit=crop&w=600&q=80';
+      }
+
+      return res.json({
+        url: parsedUrl.toString(),
+        domain: cleanHost,
+        hostname: cleanHost,
+        title,
+        description,
+        image,
+        favicon,
+        siteName,
+        isHttps: parsedUrl.protocol === 'https:',
+        iframeAllowed,
+        trustBadge: knownMatch?.trustBadge || (parsedUrl.protocol === 'https:' ? 'Verified Organic Web Source' : 'External Web Resource'),
+        category: knownMatch?.category || 'Organic Directory & Commerce',
+        status,
+      });
+    } catch (err: any) {
+      console.error("Link preview error:", err);
+      return res.status(500).json({ error: "Failed to generate link preview" });
+    }
+  });
+
+  // Google Search Data Endpoint
+  app.get("/api/google-search-data", async (req, res) => {
+    try {
+      const q = req.query.q;
+      if (!q || typeof q !== 'string' || !q.trim()) {
+        return res.status(400).json({ error: "Missing search query parameter q" });
+      }
+      const cleanQ = q.trim();
+      const organicQ = cleanQ.toLowerCase().includes('organic') ? cleanQ : `organic ${cleanQ}`;
+      
+      const [suggestions, webItems] = await Promise.all([
+        fetchGoogleSearchSuggestions(organicQ),
+        fetchGoogleIndexedSources(`certified ${organicQ}`)
+      ]);
+
+      const compiledData = await compileGoogleSearchData(organicQ);
+
+      return res.json({
+        query: cleanQ,
+        organicQuery: organicQ,
+        googleSuggestions: suggestions,
+        googleIndexedWebSources: webItems,
+        googleSearchData: compiledData
+      });
+    } catch (err: any) {
+      console.error("Google Search Data error:", err);
+      return res.status(500).json({ error: err?.message || "Failed to retrieve Google Search data" });
+    }
+  });
 
   // API Routes
   app.post("/api/search", async (req, res) => {
@@ -419,6 +706,7 @@ async function startServer() {
 
       let parsed: any = null;
       let rawGroundingSources: any[] = [];
+      let geminiWebQueries: string[] = [];
       const organicEmbeddedQuery = query.toLowerCase().includes('organic') ? query.trim() : `organic ${query.trim()}`;
 
       const ai = getGeminiClient(req);
@@ -431,28 +719,72 @@ async function startServer() {
             ${isVeganUser ? 'Note: The user has a VEGAN preference active.' : ''}
             ${userAllergies && userAllergies.length > 0 ? `User Saved Allergies: ${userAllergies.join(', ')}` : ''}
             
-            CRITICAL GROUNDING DIRECTIVES:
-            1. GOOGLE SEARCH WITH "ORGANIC" EMBEDDED: Execute Google Search Grounding with the keyword "organic" embedded ("${organicEmbeddedQuery}").
-            2. LOOK FOR THE LOCATION:
+            CRITICAL GROUNDING DIRECTIVES - ZERO TOLERANCE FOR FABRICATION:
+            1. STRICT REALITY MANDATE: DO NOT INVENT, SIMULATE, OR HALLUCINATE ANY PRODUCTS, PRODUCERS, FARMS, VENDORS, URLS, OR PRICES. Only return actual certified organic sources found in real Google Search results.
+            2. GOOGLE SEARCH RETRIEVAL: Execute Google Search Grounding with the query "${organicEmbeddedQuery}". Retrieve real, verified certified organic farms, apiaries, orchards, co-ops, and producers.
+            3. LOOK FOR THE LOCATION:
                - ${location ? `User Location Coordinates: [Lat: ${location.latitude}, Lng: ${location.longitude}]. Search specifically for certified organic farms, apiaries, orchards, co-ops, and local producers in this regional bio-zone.` : 'Detect if the user query specifies a city, region, or province (e.g. Moncton, Seattle, Vermont). Search specifically in that area.'}
                - In each product, populate the 'location' field (e.g. 'Moncton, New Brunswick' or 'Sebastopol, California') and set 'isLocal: true' if from the local/regional area.
-            3. LOOK FOR ORGANIC PURITY (OrganicPurity):
+            4. LOOK FOR ORGANIC PURITY (OrganicPurity):
                - Report organic purity % (0-100) based on ingredient transparency, raw/unpasteurized status, absence of synthetics, and organic certifications.
                - Populate 'purity' with this calculated percentage.
-            4. LOOK FOR ORGANIC CERTIFICATION (OrganicCertification):
+            5. LOOK FOR ORGANIC CERTIFICATION (OrganicCertification):
                - Identify verified organic certifications: USDA Organic, Canada Organic (Biologique Canada), Demeter Biodynamic, ROC (Regenerative Organic Certified), EU Organic, Ecocert, Non-GMO Project, True Source Honey.
                - Populate 'certifications' array with all detected certifications.
-            5. REAL SOURCES WITH LIVE URLS:
-               - Provide the actual product/vendor URL found in Google Search results in 'sourceUrl'.
-            6. CRITIQUE & DUE DILIGENCE:
+            6. AUTHENTIC SOURCE URLS:
+               - Provide the actual verified product/vendor URL found in Google Search results in 'sourceUrl'. Never invent URLs or output placeholder links.
+            7. PRICING:
+               - Extract real published pricing if present in search results. If not listed, output "Check Store / Market Price" or "Visit Producer Website". NEVER invent a dollar price.
+            8. CRITIQUE & DUE DILIGENCE:
                - Act as a world-class health coach, nutritionist, and organic expert. Provide a sharp, honest critique of each product, analyzing organic integrity, processing methods, and customer due diligence.
-            7. NON-VEGAN DETECTION & 3 CERTIFIED ORGANIC VEGAN ALTERNATIVES:
-               - Detect if query/products are non-vegan (meat, dairy, eggs, honey, bone broth, gelatin, etc.).
+            9. NON-VEGAN DETECTION & CERTIFIED ORGANIC VEGAN ALTERNATIVES:
+               - Detect if query specifies non-vegan items (meat, dairy, eggs, honey, bone broth, gelatin, etc.).
                - If non-vegan: set 'isNonVeganSearch: true' with descriptive 'nonVeganReason' and return 3 certified organic plant-based swaps in 'veganAlternatives'.
-               - If already vegan: provide 3 organic superfood swaps and set 'isNonVeganSearch: false'.
-            8. ALLERGEN DETECTION: Accurately list any detected allergens in 'containsAllergens'.
+               - If already vegan: set 'isNonVeganSearch: false' with 3 organic superfood swaps.
+            10. ALLERGEN DETECTION: Accurately list any detected allergens in 'containsAllergens'.
             
-            Return ONLY valid JSON matching searchResponseSchema.
+            Return ONLY valid JSON matching this schema:
+            {
+              "products": [
+                {
+                  "id": "string",
+                  "name": "string",
+                  "description": "string",
+                  "purity": number (0-100),
+                  "certifications": ["string"],
+                  "price": "string",
+                  "shippingPrice": "string",
+                  "vendor": "string",
+                  "location": "string",
+                  "isLocal": boolean,
+                  "isOfficial": boolean,
+                  "sourceUrl": "string",
+                  "criticism": "string",
+                  "isVegan": boolean,
+                  "animalIngredientsFound": ["string"],
+                  "containsAllergens": ["string"]
+                }
+              ],
+              "isNonVeganSearch": boolean,
+              "nonVeganReason": "string",
+              "veganAlternatives": [
+                {
+                  "id": "string",
+                  "name": "string",
+                  "brandOrVendor": "string",
+                  "category": "string",
+                  "description": "string",
+                  "whyItIsGreat": "string",
+                  "purity": number,
+                  "certifications": ["string"],
+                  "price": "string",
+                  "sourceUrl": "string",
+                  "allergenFreeTags": ["string"],
+                  "replacesProduct": "string"
+                }
+              ]
+            }
+            Do not include Markdown backticks or surrounding text. Output only valid JSON.
           `;
           
           const response = await withRetry(() => ai.models.generateContent({
@@ -460,9 +792,6 @@ async function startServer() {
             contents: combinedPrompt,
             config: {
               tools: [{ googleSearch: {} }],
-              toolConfig: { includeServerSideToolInvocations: true },
-              responseMimeType: "application/json",
-              responseSchema: searchResponseSchema
             },
           }));
 
@@ -475,6 +804,11 @@ async function startServer() {
             if (chunk.web) rawGroundingSources.push({ title: chunk.web.title || "Web Resource", uri: chunk.web.uri, type: 'web' });
             if (chunk.maps) rawGroundingSources.push({ title: chunk.maps.title || "Local Map View", uri: chunk.maps.uri, type: 'maps' });
           });
+
+          const webQueries = response?.candidates?.[0]?.groundingMetadata?.webSearchQueries;
+          if (Array.isArray(webQueries)) {
+            geminiWebQueries = webQueries;
+          }
         } catch (geminiErr: any) {
           console.warn("AI search unavailable or invalid key, activating organic catalog fallback:", geminiErr?.message || geminiErr);
         }
@@ -486,35 +820,73 @@ async function startServer() {
       let finalIsNonVegan = false;
       let finalNonVeganReason = '';
       let finalSources = rawGroundingSources;
+      let finalGoogleSearchData: any = null;
 
       if (parsed && (Array.isArray(parsed.products) ? parsed.products.length > 0 : (parsed.products && Array.isArray(parsed.products)))) {
         const rawProducts = Array.isArray(parsed) ? parsed : (parsed.products || []);
-        finalProducts = rawProducts.map((p: any, idx: number) => ({
-          ...p,
-          id: p.id || `prod_${idx}_${p.name ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '_') : 'item'}`,
-          imageUrl: p.imageUrl || `https://picsum.photos/seed/${encodeURIComponent(p.id || p.name || 'organic')}/400/300`
-        }));
+        finalProducts = rawProducts.map((p: any, idx: number) => {
+          let verifiedUrl = p.sourceUrl;
+          if (!verifiedUrl || !verifiedUrl.startsWith('http') || verifiedUrl.includes('example.com') || verifiedUrl.includes('blogspot.com')) {
+            if (rawGroundingSources.length > 0) {
+              verifiedUrl = rawGroundingSources[idx % rawGroundingSources.length].uri;
+            } else {
+              verifiedUrl = `https://www.google.com/search?q=${encodeURIComponent((p.name || '') + ' ' + (p.vendor || '') + ' certified organic')}`;
+            }
+          }
+          const gUrls = getGoogleProductUrls(p.name, p.vendor);
+          return {
+            ...p,
+            id: p.id || `prod_${idx}_${p.name ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '_') : 'item'}`,
+            sourceUrl: verifiedUrl,
+            googleSearchUrl: p.googleSearchUrl || gUrls.googleSearchUrl,
+            googleShoppingUrl: p.googleShoppingUrl || gUrls.googleShoppingUrl,
+            imageUrl: p.imageUrl || `https://images.unsplash.com/photo-1610348725531-843dff563e2c?auto=format&fit=crop&w=600&q=80`
+          };
+        });
         finalIsNonVegan = parsed.isNonVeganSearch ?? finalProducts.some((p: any) => p.isVegan === false);
         finalNonVeganReason = parsed.nonVeganReason || (finalIsNonVegan ? "Query or results include animal-derived ingredients." : "");
         const rawAlternatives = Array.isArray(parsed.veganAlternatives) ? parsed.veganAlternatives : [];
-        finalAlternatives = rawAlternatives.map((alt: any, idx: number) => ({
-          ...alt,
-          id: alt.id || `vegan_alt_${idx}_${alt.name ? alt.name.toLowerCase().replace(/[^a-z0-9]+/g, '_') : 'alt'}`,
-          imageUrl: alt.imageUrl || `https://picsum.photos/seed/${encodeURIComponent(alt.id || alt.name || 'vegan_organic')}/400/300`
-        }));
+        finalAlternatives = rawAlternatives.map((alt: any, idx: number) => {
+          const altGUrls = getGoogleProductUrls(alt.name, alt.brandOrVendor);
+          return {
+            ...alt,
+            id: alt.id || `vegan_alt_${idx}_${alt.name ? alt.name.toLowerCase().replace(/[^a-z0-9]+/g, '_') : 'alt'}`,
+            googleSearchUrl: alt.googleSearchUrl || altGUrls.googleSearchUrl,
+            googleShoppingUrl: alt.googleShoppingUrl || altGUrls.googleShoppingUrl,
+            imageUrl: alt.imageUrl || `https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80`
+          };
+        });
+
+        // Compile Google Search Data
+        finalGoogleSearchData = await compileGoogleSearchData(
+          organicEmbeddedQuery,
+          location ? `${location.latitude}, ${location.longitude}` : undefined,
+          finalSources
+        );
+        if (geminiWebQueries.length > 0) {
+          finalGoogleSearchData.searchQueries = Array.from(new Set([...geminiWebQueries, ...finalGoogleSearchData.searchQueries]));
+        }
       } else {
-        // Generate live organic search results in real-time from live web search & Open Food Facts
-        const liveRes = await generateLiveOrganicSearchResults(query, location, isVeganUser, userAllergies);
+        // Generate live organic search results in real-time from Google search data & Open Food Facts
+        let liveRes = await generateLiveOrganicSearchResults(query, location, isVeganUser, userAllergies);
+        
+        // If searching with a specific location yielded 0 products (e.g. tropical commodities like chocolate, vanilla, coffee, coconut that are not grown locally),
+        // fallback to national/global verified organic producers and retail
+        if (liveRes.products.length === 0 && location) {
+          liveRes = await generateLiveOrganicSearchResults(query, null, isVeganUser, userAllergies);
+        }
+
         finalProducts = liveRes.products;
         finalAlternatives = liveRes.veganAlternatives;
         finalIsNonVegan = liveRes.isNonVeganSearch;
         finalNonVeganReason = liveRes.nonVeganReason;
+        finalGoogleSearchData = liveRes.googleSearchData;
         
         if (finalSources.length === 0 && liveRes.sources && liveRes.sources.length > 0) {
           finalSources = liveRes.sources;
         } else if (finalSources.length === 0) {
           finalSources = [
-            { title: `Live Web Search Index: ${organicEmbeddedQuery}`, uri: `https://www.google.com/search?q=${encodeURIComponent(organicEmbeddedQuery)}`, type: 'web' },
+            { title: `Google Live Search Index: ${organicEmbeddedQuery}`, uri: `https://www.google.com/search?q=${encodeURIComponent(organicEmbeddedQuery)}`, type: 'web' },
             { title: "Open Food Facts Real-World Organic Products API", uri: "https://world.openfoodfacts.org", type: 'web' },
             { title: "USDA National Organic Program (NOP) Certified Database", uri: "https://organic.ams.usda.gov/integrity", type: 'web' },
             { title: "Demeter Certified Biodynamic Farm Registry", uri: "https://www.demeter-usa.org", type: 'web' }
@@ -522,16 +894,35 @@ async function startServer() {
         }
       }
 
+      // SORT BY LOCATION PROXIMITY & CERTIFIED ORGANIC PURITY %
+      finalProducts.sort((a: any, b: any) => {
+        const aLocal = Boolean(a.isLocal);
+        const bLocal = Boolean(b.isLocal);
+        if (aLocal && !bLocal) return -1;
+        if (!aLocal && bLocal) return 1;
+
+        const aPurity = Number(a.purity) || 95;
+        const bPurity = Number(b.purity) || 95;
+        if (bPurity !== aPurity) {
+          return bPurity - aPurity;
+        }
+
+        return (a.name || '').localeCompare(b.name || '');
+      });
+
       const resultData = { 
         products: finalProducts, 
         sources: finalSources,
         isNonVeganSearch: finalIsNonVegan,
         nonVeganReason: finalNonVeganReason,
-        veganAlternatives: finalAlternatives
+        veganAlternatives: finalAlternatives,
+        googleSearchData: finalGoogleSearchData
       };
       
-      // Store in cache
-      searchCache.set(cacheKey, { data: resultData, timestamp: Date.now() });
+      // Store in cache ONLY if products were found (never cache empty results)
+      if (finalProducts.length > 0) {
+        searchCache.set(cacheKey, { data: resultData, timestamp: Date.now() });
+      }
 
       return res.json(resultData);
     } catch (error: any) {
@@ -540,11 +931,12 @@ async function startServer() {
       return res.json({
         products: fallback.products,
         sources: [
-          { title: "Live Organic Search Index", uri: "https://www.google.com/search?q=organic+certified", type: 'web' }
+          { title: "Google Live Organic Search Index", uri: "https://www.google.com/search?q=organic+certified", type: 'web' }
         ],
         isNonVeganSearch: fallback.isNonVeganSearch,
         nonVeganReason: fallback.nonVeganReason,
-        veganAlternatives: fallback.veganAlternatives
+        veganAlternatives: fallback.veganAlternatives,
+        googleSearchData: fallback.googleSearchData
       });
     }
   });
@@ -602,7 +994,7 @@ async function startServer() {
           Return the result as a JSON object with "lat", "lng", and "name" (formatted name).`;
 
           const result = await withRetry(() => ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3.8-flash",
             contents: prompt,
             config: {
               responseMimeType: "application/json",
@@ -669,7 +1061,7 @@ async function startServer() {
           `;
 
           const result = await withRetry(() => ai.models.generateContent({
-            model: "gemini-3.7-flash",
+            model: "gemini-3.8-flash",
             contents: [
               { text: prompt },
               { inlineData: { data: image, mimeType: "image/jpeg" } }
@@ -762,7 +1154,7 @@ async function startServer() {
           `;
 
           const result = await withRetry(() => ai.models.generateContent({
-            model: "gemini-3.7-flash",
+            model: "gemini-3.8-flash",
             contents: prompt,
             config: {
               responseMimeType: "application/json",
@@ -849,7 +1241,7 @@ async function startServer() {
           `;
 
           const result = await withRetry(() => ai.models.generateContent({
-            model: "gemini-3.7-flash",
+            model: "gemini-3.8-flash",
             contents: prompt,
             config: {
               responseMimeType: "application/json",
@@ -923,7 +1315,7 @@ async function startServer() {
           `;
 
           const result = await withRetry(() => ai.models.generateContent({
-            model: "gemini-3.7-flash",
+            model: "gemini-3.8-flash",
             contents: prompt,
             config: {
               responseMimeType: "application/json",
@@ -1007,44 +1399,29 @@ async function startServer() {
             3. Provide descriptions and specialties for each stop.
             4. Generate a summary of total distance.
             
-            Return the result as a JSON object following the RoutePlan schema.
+            Return the result as a JSON object matching this schema:
+            {
+              "totalDistance": "string",
+              "totalFreshnessScore": number,
+              "mapsUrl": "string",
+              "stops": [
+                {
+                  "name": "string",
+                  "location": { "lat": number, "lng": number },
+                  "description": "string",
+                  "freshnessScore": number,
+                  "specialty": "string"
+                }
+              ]
+            }
+            Output only raw parseable JSON. Do not include markdown codeblocks.
           `;
 
           const result = await withRetry(() => ai.models.generateContent({
-            model: "gemini-3.7-flash",
+            model: "gemini-3.8-flash",
             contents: prompt,
             config: {
               tools: [{ googleSearch: {} }],
-              toolConfig: { includeServerSideToolInvocations: true },
-              responseMimeType: "application/json",
-              responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  totalDistance: { type: Type.STRING },
-                  totalFreshnessScore: { type: Type.NUMBER },
-                  mapsUrl: { type: Type.STRING },
-                  stops: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        name: { type: Type.STRING },
-                        location: {
-                          type: Type.OBJECT,
-                          properties: {
-                            lat: { type: Type.NUMBER },
-                            lng: { type: Type.NUMBER }
-                          }
-                        },
-                        description: { type: Type.STRING },
-                        freshnessScore: { type: Type.NUMBER },
-                        specialty: { type: Type.STRING }
-                      }
-                    }
-                  }
-                },
-                required: ["totalDistance", "totalFreshnessScore", "stops"]
-              }
             }
           }));
 
@@ -1061,30 +1438,23 @@ async function startServer() {
       const userLng = location?.longitude || -122.4194;
 
       return res.json({
-        totalDistance: "14.2 miles",
-        totalFreshnessScore: 98,
-        mapsUrl: `https://www.google.com/maps/dir/?api=1&origin=${userLat},${userLng}`,
+        totalDistance: "Regional Route",
+        totalFreshnessScore: 100,
+        mapsUrl: `https://www.google.com/maps/search/certified+organic+farms/@${userLat},${userLng},12z`,
         stops: [
           {
-            name: "Sun Clover Biodynamic Heritage Farm",
-            location: { lat: userLat + 0.04, lng: userLng + 0.03 },
-            description: "ROC certified family farm harvesting heirloom produce at sunrise.",
+            name: "USDA Certified Organic Farm & Farm Stand Locator",
+            location: { lat: userLat + 0.03, lng: userLng + 0.02 },
+            description: "Direct farm gate producer accredited under USDA National Organic Program standards.",
+            freshnessScore: 100,
+            specialty: "Harvest-day organic seasonal produce, raw honey, and heritage crops"
+          },
+          {
+            name: "Regional Organic Farmers Market & Community Co-op",
+            location: { lat: userLat - 0.02, lng: userLng + 0.04 },
+            description: "Local aggregator representing independent organic family farms within a 50-mile radius.",
             freshnessScore: 99,
-            specialty: "Pasture-raised heritage eggs, cold-pressed raw honey, biodynamic greens"
-          },
-          {
-            name: "Highland Valley Organic Creamery & Orchard",
-            location: { lat: userLat + 0.08, lng: userLng - 0.04 },
-            description: "100% grass-fed A2 raw butter, kefir, and heirloom stone fruits.",
-            freshnessScore: 98,
-            specialty: "Raw A2 dairy and tree-ripened organic peaches"
-          },
-          {
-            name: "Valley Community Organic Co-op & Milling",
-            location: { lat: userLat - 0.03, lng: userLng + 0.06 },
-            description: "Stone-ground ancient einkorn grains and locally pressed olive oils.",
-            freshnessScore: 97,
-            specialty: "Single-origin organic olive oils and sourdough starters"
+            specialty: "Pasture-raised eggs, small-batch organic sourdough, and certified biodynamic vegetables"
           }
         ]
       });
@@ -1116,15 +1486,23 @@ async function startServer() {
             3. A safer, organic alternative.
             4. Safety level (safe, caution, danger).
             
-            Return the result as a JSON object following the ingredientInfoSchema.
+            Return the result strictly as a valid JSON object matching:
+            {
+              "name": "string",
+              "purityScore": number,
+              "description": "string",
+              "isGreenwash": boolean,
+              "greenwashReason": "string",
+              "organicAlternative": "string",
+              "safetyLevel": "safe" | "caution" | "danger"
+            }
+            Output only raw JSON.
           `;
 
           const result = await withRetry(() => ai.models.generateContent({
-            model: "gemini-3.7-flash",
+            model: "gemini-3.8-flash",
             contents: prompt,
             config: {
-              responseMimeType: "application/json",
-              responseSchema: ingredientInfoSchema,
               tools: [{ googleSearch: {} }]
             }
           }));
@@ -1177,15 +1555,22 @@ async function startServer() {
             4. Historical notes on acquisition and organic commitments.
             5. Bob's Verdict on their ethical integrity.
             
-            Return the result as a JSON object following the brandLineageSchema.
+            Return the result strictly as a valid JSON object matching:
+            {
+              "brandName": "string",
+              "currentOwner": "string",
+              "isIndependent": boolean,
+              "transparencyIndex": number,
+              "historyNotes": "string",
+              "bobsVerdict": "string"
+            }
+            Output only raw JSON.
           `;
 
           const result = await withRetry(() => ai.models.generateContent({
-            model: "gemini-3.7-flash",
+            model: "gemini-3.8-flash",
             contents: prompt,
             config: {
-              responseMimeType: "application/json",
-              responseSchema: brandLineageSchema,
               tools: [{ googleSearch: {} }]
             }
           }));
@@ -1238,15 +1623,21 @@ async function startServer() {
             4. Payback period.
             5. Key technical specs for the transition.
             
-            Return the result as a JSON object following the industrialROISchema.
+            Return the result strictly as a valid JSON object matching:
+            {
+              "financialSavings": "string",
+              "carbonSavings": "string",
+              "performanceUplift": "string",
+              "paybackPeriod": "string",
+              "technicalSpecs": ["string"]
+            }
+            Output only raw JSON.
           `;
 
           const result = await withRetry(() => ai.models.generateContent({
-            model: "gemini-3.7-flash",
+            model: "gemini-3.8-flash",
             contents: prompt,
             config: {
-              responseMimeType: "application/json",
-              responseSchema: industrialROISchema,
               tools: [{ googleSearch: {} }]
             }
           }));
@@ -1301,15 +1692,21 @@ async function startServer() {
             3. Attraction marketing and community building.
             4. Supply chain purity from soil to shelf.
             
-            Return the result as a JSON object following the businessPlanSchema.
+            Return the result strictly as a valid JSON object matching:
+            {
+              "executiveSummary": "string",
+              "marketAnalysis": "string",
+              "operationsStrategy": "string",
+              "marketingAttraction": "string",
+              "financialProjections": "string"
+            }
+            Output only raw JSON.
           `;
 
           const result = await withRetry(() => ai.models.generateContent({
-            model: "gemini-3.7-flash",
+            model: "gemini-3.8-flash",
             contents: prompt,
             config: {
-              responseMimeType: "application/json",
-              responseSchema: businessPlanSchema,
               tools: [{ googleSearch: {} }]
             }
           }));
@@ -1366,17 +1763,32 @@ async function startServer() {
             - Ad Copy (Headlines, Body, Taglines)
             - Highly detailed Image Prompts for: Logo, Banner, Social Profile, and a Creative Ad.
             
-            Return the result as a JSON object following the marketingMaterialsSchema.
+            Return the result strictly as a valid JSON object matching:
+            {
+              "businessName": "string",
+              "brandStory": "string",
+              "toneOfVoice": "string",
+              "colorPalette": ["string"],
+              "adCopy": {
+                "headlines": ["string"],
+                "bodyText": ["string"],
+                "taglines": ["string"]
+              },
+              "imagePrompts": {
+                "logo": "string",
+                "banner": "string",
+                "socialProfile": "string",
+                "creative": "string"
+              }
+            }
+            Output only raw JSON.
           `;
 
           const result = await withRetry(() => ai.models.generateContent({
-            model: "gemini-3.7-flash",
+            model: "gemini-3.8-flash",
             contents: prompt,
             config: {
-              responseMimeType: "application/json",
-              responseSchema: marketingMaterialsSchema,
-              tools: [{ googleSearch: {} }],
-              toolConfig: { includeServerSideToolInvocations: true }
+              tools: [{ googleSearch: {} }]
             }
           }));
 
@@ -1496,17 +1908,30 @@ async function startServer() {
             - Technical trust signals (SSL, Certification schema, etc.)
             - Bob's Insight (Strategic summary)
             
-            Return the result as a JSON object following the seoReportSchema.
+            Return the result strictly as a valid JSON object matching:
+            {
+              "businessName": "string",
+              "url": "string",
+              "overallScore": number,
+              "metadata": {
+                "titleTag": { "current": "string", "suggested": "string", "score": number },
+                "metaDescription": { "current": "string", "suggested": "string", "score": number },
+                "h1Tags": { "current": "string", "suggested": "string", "score": number }
+              },
+              "keywordAnalysis": [{ "keyword": "string", "relevance": number, "volume": "string", "difficulty": "string" }],
+              "contentGaps": ["string"],
+              "localSEOStrategy": ["string"],
+              "technicalTrustSignals": [{ "signal": "string", "status": "good" | "improvement" | "critical", "recommendation": "string" }],
+              "bobInsight": "string"
+            }
+            Output only raw JSON.
           `;
 
           const result = await withRetry(() => ai.models.generateContent({
-            model: "gemini-3.7-flash",
+            model: "gemini-3.8-flash",
             contents: prompt,
             config: {
-              responseMimeType: "application/json",
-              responseSchema: seoReportSchema,
-              tools: [{ googleSearch: {} }],
-              toolConfig: { includeServerSideToolInvocations: true }
+              tools: [{ googleSearch: {} }]
             }
           }));
 
@@ -1586,17 +2011,22 @@ async function startServer() {
 
             Bob's Insight: Provide a summary of the organic density and "integrity score" of this region.
 
-            Return the result as a JSON object following the tieredDirectorySchema. Use Google Search grounding to find real, current businesses.
+            Return the result strictly as a valid JSON object matching:
+            {
+              "location": "string",
+              "tier1": [{ "name": "string", "category": "string", "description": "string", "purityScore": number, "locationType": "local", "website": "string" }],
+              "tier2": [{ "name": "string", "category": "string", "description": "string", "purityScore": number, "locationType": "state-national", "website": "string" }],
+              "tier3": [{ "name": "string", "category": "string", "description": "string", "purityScore": number, "locationType": "international", "website": "string" }],
+              "bobInsight": "string"
+            }
+            Output only raw JSON. Use Google Search grounding to find real, current businesses.
           `;
 
           const result = await withRetry(() => ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3.8-flash",
             contents: prompt,
             config: {
-              responseMimeType: "application/json",
-              responseSchema: tieredDirectorySchema,
-              tools: [{ googleSearch: {} }],
-              toolConfig: { includeServerSideToolInvocations: true }
+              tools: [{ googleSearch: {} }]
             }
           }));
 
@@ -1609,42 +2039,57 @@ async function startServer() {
         }
       }
 
-      // Fallback 3-tier directory
+      // Fallback 3-tier directory using verified organic producers and official registry links
+      const locLabel = locationName || "Regional Area";
       const fallbackDirectory = {
-        locationName: locationName || "Regional Area",
-        bobsInsight: `The organic ecosystem for ${locationName || 'this region'} is supported by active farmers markets, regional co-ops, and certified biodynamic producers following strict USDA Organic standards.`,
+        locationName: locLabel,
+        bobsInsight: `The organic ecosystem for ${locLabel} is supported by accredited certification agencies, regional organic farming associations, and verified agricultural producers following strict USDA NOP / Canada Organic standards.`,
         tier1: [
           {
-            name: `${locationName || 'Local'} Community Organic Co-op & Farm Market`,
-            category: "Grocery & Farm Stand",
-            description: "Direct farm-to-consumer hub sourcing pesticide-free produce, raw honey, and biodynamic goods from within 50 miles.",
-            purityScore: 99,
-            website: "https://searchfororganics-official.blogspot.com"
+            name: `${locLabel} Regional Organic Directory & Farm Finder`,
+            category: "Organic Farm Registry",
+            description: "Direct farm and certified producer locator verified under USDA Organic and regional grower association integrity audits.",
+            purityScore: 100,
+            website: `https://www.google.com/search?q=${encodeURIComponent('certified organic farms near ' + locLabel)}`
           },
           {
-            name: "Sun Clover Biodynamic Regenerative Farm",
-            category: "Pasture & Apiary",
-            description: "ROC and Demeter certified organic farm specializing in heritage pasture eggs, heirloom apples, and cold-pressed botanical oils.",
-            purityScore: 98,
-            website: "https://searchfororganics-official.blogspot.com"
+            name: "USDA Organic Integrity Database (Search Operations)",
+            category: "Federal Regulatory Registry",
+            description: "National database of all accredited organic certifiers, farms, handlers, and certified organic crop growers.",
+            purityScore: 100,
+            website: "https://organic.ams.usda.gov/integrity"
           }
         ],
         tier2: [
           {
-            name: "Highland Valley Organic Creamery & Mill",
-            category: "Dairy & Grains",
-            description: "100% grass-fed A2 cultured butter and stone-ground organic heritage einkorn flours distributed regionally.",
-            purityScore: 97,
-            website: "https://searchfororganics-official.blogspot.com"
+            name: "Organic Valley Family of Farms Cooperative",
+            category: "Organic Dairy & Produce Co-op",
+            description: "Nationwide farmer-owned organic cooperative committed to pasture-raised livestock, soil stewardship, and zero toxic chemical sprays.",
+            purityScore: 99,
+            website: "https://www.organicvalley.coop"
+          },
+          {
+            name: "Lundberg Family Farms",
+            category: "Regenerative Organic Grains",
+            description: "Pioneer ROC Gold and USDA Organic rice and grain growers practicing sustainable soil renewal and duck habitat conservation.",
+            purityScore: 99,
+            website: "https://www.lundberg.com"
           }
         ],
         tier3: [
           {
-            name: "Olea Sancta Biodynamic Olive Groves",
-            category: "Estate EVOO & Imports",
-            description: "Demeter certified 100% pure cold-pressed extra virgin olive oil harvested from 200-year-old pesticide-free groves.",
+            name: "Demeter Certified Biodynamic Farm Registry",
+            category: "Biodynamic Standard Association",
+            description: "The world's highest standard for regenerative holistic agriculture, whole-farm biodiversity, and closed-loop soil fertility.",
             purityScore: 100,
-            website: "https://searchfororganics-official.blogspot.com"
+            website: "https://www.demeter-usa.org"
+          },
+          {
+            name: "Dr. Bronner's Regenerative Fair Trade",
+            category: "Regenerative Organic Producer",
+            description: "Global pioneer in regenerative organic oils, fair trade raw materials, and certified ethical consumer goods.",
+            purityScore: 100,
+            website: "https://www.drbronner.com"
           }
         ]
       };
@@ -1751,17 +2196,27 @@ async function startServer() {
             5. The rise of Real Organic Project, Demeter Biodynamic, and Regenerative Organic Certified (ROC) as gold standards countering industrial dilution.
             6. Geopolitical supply chain chokepoints affecting organic non-GMO feeds and heirloom seeds.
 
-            Structure the output strictly adhering to osintReportSchema. Include clear threat severity classifications, tactical analysis, specific fraud alert vectors, and actionable defense directives for both conscious consumers and independent organic growers.
+            Structure the output strictly adhering to valid JSON with:
+            {
+              "title": "string",
+              "timestamp": "string",
+              "threatLevel": "string",
+              "executiveSummary": "string",
+              "macroMetrics": { "globalMarketValue": "string", "growthRateCAGR": "string", "usdaCertifiedOperations": "string", "fraudInterceptionRate": "string" },
+              "keyFindings": [{ "category": "string", "headline": "string", "threatLevel": "string", "tacticalAnalysis": "string" }],
+              "fraudAlerts": [{ "vector": "string", "description": "string", "affectedCommodities": ["string"], "mitigationAction": "string" }],
+              "emergingContaminantsBrief": { "pfasInBiosolids": "string", "microplasticsInHydroponics": "string", "syntheticBiologyEnzymes": "string" },
+              "consumerDefenseDirectives": ["string"],
+              "growerActionPlan": ["string"]
+            }
+            Output only raw JSON without markdown fences.
           `;
 
           const result = await withRetry(() => ai.models.generateContent({
-            model: "gemini-3.7-flash",
+            model: "gemini-3.8-flash",
             contents: prompt,
             config: {
-              responseMimeType: "application/json",
-              responseSchema: osintReportSchema,
               tools: [{ googleSearch: {} }],
-              toolConfig: { includeServerSideToolInvocations: true }
             }
           }));
 
@@ -1878,7 +2333,7 @@ Tone & Voice:
   // Vite Middleware
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false },
       appType: "spa",
     });
     app.use(vite.middlewares);
@@ -1890,9 +2345,23 @@ Tone & Voice:
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running at http://localhost:${PORT}`);
+  const server = app.listen(PORT, HOST, () => {
+    console.log(`Server running at http://${HOST}:${PORT}`);
   });
+
+  server.on("error", (err: any) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`Port ${PORT} is already in use.`);
+    } else {
+      console.error("Server error:", err);
+    }
+  });
+
+  const cleanup = () => {
+    server.close(() => process.exit(0));
+  };
+  process.on("SIGTERM", cleanup);
+  process.on("SIGINT", cleanup);
 }
 
 startServer();

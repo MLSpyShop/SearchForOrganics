@@ -5,9 +5,9 @@ import {
     Settings, Navigation, Info, ArrowRight, Star, Leaf, CheckCircle2, Lock,
     MessageSquare, Users, Mail, Sparkles, Atom, BookOpen, HelpCircle, Download, FileText, ClipboardList, Megaphone, BarChart3,
     ChevronDown, Database, Barcode, ShoppingCart, Dna, Package, Building2, Code, CloudRain, Activity, ScanLine,
-    Radio, Flame, ShieldAlert, AlertTriangle
+    Radio, Flame, ShieldAlert, AlertTriangle, Eye, GitCommit
 } from 'lucide-react';
-import { Product, UserLocation, GroundingSource, TieredDirectory } from './types';
+import { Product, UserLocation, GroundingSource, TieredDirectory, GoogleSearchData } from './types';
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import { searchOrganicProducts, geocodeLocation, getOrganicDirectory } from './services/geminiService';
@@ -54,8 +54,15 @@ import { ProduceSwap } from './src/components/ProduceSwap';
 import { DeveloperApi } from './src/components/DeveloperApi';
 import { OsintReportModal } from './src/components/OsintReportModal';
 import { OrganicTips } from './src/components/OrganicTips';
+import { LinkPreviewModal } from './src/components/LinkPreviewModal';
+import { LinkPreviewButton } from './src/components/LinkPreviewButton';
+import { GoogleSearchDataPanel } from './src/components/GoogleSearchDataPanel';
+import { VersionLog } from './src/components/VersionLog';
+import { FarmMapExplorer } from './src/components/FarmMapExplorer';
+import { AiNutritionScanner } from './src/components/AiNutritionScanner';
+import { EcoImpactDashboard } from './src/components/EcoImpactDashboard';
 
-type TabType = 'search' | 'stateOfOrganics' | 'community' | 'scanner' | 'basket' | 'microbiome' | 'usda' | 'csa' | 'carbon' | 'wholesale' | 'swap' | 'devApi' | 'audit' | 'calc' | 'workshops' | 'route' | 'businessPlan' | 'marketingKit' | 'seoReport' | 'intelligence' | 'info' | 'faq' | 'chat' | 'privacy' | 'ownership' | 'sales' | 'affiliate' | 'terms' | 'sitemap' | 'about' | 'contact' | 'certification' | 'partnership' | 'tips';
+type TabType = 'search' | 'stateOfOrganics' | 'community' | 'scanner' | 'basket' | 'microbiome' | 'usda' | 'csa' | 'carbon' | 'wholesale' | 'swap' | 'devApi' | 'audit' | 'calc' | 'workshops' | 'route' | 'businessPlan' | 'marketingKit' | 'seoReport' | 'intelligence' | 'info' | 'faq' | 'chat' | 'privacy' | 'ownership' | 'sales' | 'affiliate' | 'terms' | 'sitemap' | 'about' | 'contact' | 'certification' | 'partnership' | 'tips' | 'versionLog' | 'farmMap' | 'aiNutrition' | 'ecoImpact';
 
 const Logo: FC<{ className?: string }> = ({ className }) => (
     <div className={`relative flex items-center justify-center ${className}`}>
@@ -104,7 +111,8 @@ const COMPLIANCE_LINKS: { id: TabType, label: string }[] = [
     { id: 'about', label: 'About Mission' },
     { id: 'contact', label: 'Contact Lab' },
     { id: 'certification', label: 'Certification' },
-    { id: 'partnership', label: 'Partnerships' }
+    { id: 'partnership', label: 'Partnerships' },
+    { id: 'versionLog', label: 'Version Log' }
 ];
 
 const TABS: { id: TabType, label: string, icon: any }[] = [
@@ -135,6 +143,10 @@ const TABS: { id: TabType, label: string, icon: any }[] = [
     { id: 'about', label: 'About', icon: Leaf },
     { id: 'contact', label: 'Contact', icon: Mail },
     { id: 'certification', label: 'Certification', icon: ShieldCheck },
+    { id: 'versionLog', label: 'Version Log', icon: GitCommit },
+    { id: 'farmMap', label: 'Farm Map Explorer', icon: MapPin },
+    { id: 'aiNutrition', label: 'AI Macro Scanner', icon: Activity },
+    { id: 'ecoImpact', label: 'Eco-Impact Dashboard', icon: Leaf },
 ];
 
 // --- UI Components ---
@@ -433,7 +445,11 @@ const SearchBar: FC<SearchBarProps> = ({
   );
 };
 
-const ProductDetailModal: FC<{ product: Product, onClose: () => void }> = ({ product, onClose }) => {
+const ProductDetailModal: FC<{ 
+  product: Product; 
+  onClose: () => void;
+  onOpenPreview?: (url: string, title?: string) => void;
+}> = ({ product, onClose, onOpenPreview }) => {
     return (
         <div className="fixed inset-0 bg-organic-green-dark/60 backdrop-blur-lg flex items-center justify-center z-[110] p-4 md:p-8 animate-in fade-in duration-300 overflow-y-auto" onClick={onClose}>
             <div className="bg-cream rounded-[2.5rem] shadow-3xl w-full max-w-4xl overflow-hidden animate-in zoom-in-95 duration-500" onClick={e => e.stopPropagation()}>
@@ -470,15 +486,28 @@ const ProductDetailModal: FC<{ product: Product, onClose: () => void }> = ({ pro
                                 <h2 className="text-4xl font-black text-organic-green-dark leading-none tracking-tighter mb-2">{product.name}</h2>
                                 <div className="flex flex-wrap items-center gap-2">
                                     {product.sourceUrl ? (
-                                        <a 
-                                            href={product.sourceUrl} 
-                                            target="_blank" 
-                                            rel="noopener noreferrer"
-                                            className="text-sm font-black text-gray-500 uppercase tracking-widest hover:text-organic-green transition-colors flex items-center gap-1.5"
-                                        >
-                                            {product.vendor}
-                                            <ExternalLink className="w-3.5 h-3.5 text-organic-green" />
-                                        </a>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <a 
+                                                href={product.sourceUrl} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                className="text-sm font-black text-gray-500 uppercase tracking-widest hover:text-organic-green transition-colors flex items-center gap-1.5"
+                                            >
+                                                {product.vendor}
+                                                <ExternalLink className="w-3.5 h-3.5 text-organic-green" />
+                                            </a>
+                                            {onOpenPreview && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onOpenPreview(product.sourceUrl!, product.name)}
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-50 text-organic-green text-[10px] font-black uppercase tracking-wider hover:bg-organic-green hover:text-white transition-all border border-emerald-200"
+                                                    title="Preview site inside Search For Organics"
+                                                >
+                                                    <Eye className="w-3 h-3" />
+                                                    <span>Preview Link</span>
+                                                </button>
+                                            )}
+                                        </div>
                                     ) : (
                                         <p className="text-sm font-black text-gray-500 uppercase tracking-widest">{product.vendor}</p>
                                     )}
@@ -599,14 +628,41 @@ const ProductDetailModal: FC<{ product: Product, onClose: () => void }> = ({ pro
                             </p>
                         </div>
 
-                        <div className="mt-auto pt-6 flex flex-col md:flex-row gap-4">
-                             <BookmarkButton product={product} variant="button" className="flex-1" />
+                        <div className="mt-auto pt-6 flex flex-col sm:flex-row gap-3">
+                             <BookmarkButton product={product} variant="button" className="sm:flex-1" />
+                             {product.googleSearchUrl && (
+                                <a 
+                                    href={product.googleSearchUrl}
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="sm:flex-1 bg-blue-50 hover:bg-blue-100 text-blue-900 border-2 border-blue-200 font-black text-center py-5 rounded-2xl transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2 shadow-xs active:scale-95"
+                                    title="Verify product and producer in live Google Search results"
+                                >
+                                    <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0">
+                                      <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.86c2.26-2.09 3.685-5.17 3.685-9.09z" />
+                                      <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.37 24 12 24z" />
+                                      <path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z" />
+                                      <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z" />
+                                    </svg>
+                                    GOOGLE SEARCH
+                                </a>
+                             )}
+                             {product.sourceUrl && onOpenPreview && (
+                                <button 
+                                    type="button"
+                                    onClick={() => onOpenPreview(product.sourceUrl!, product.name)}
+                                    className="sm:flex-1 bg-emerald-50 hover:bg-emerald-100 text-organic-green-dark border-2 border-emerald-300 font-black text-center py-5 rounded-2xl transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2 shadow-xs active:scale-95"
+                                >
+                                    <Eye className="w-4 h-4 text-emerald-700" />
+                                    PREVIEW SITE
+                                </button>
+                             )}
                              {product.sourceUrl ? (
                                 <a 
                                     href={product.sourceUrl} 
                                     target="_blank" 
                                     rel="noopener noreferrer"
-                                    className="flex-1 bg-organic-green-dark text-white font-black text-center py-5 rounded-2xl hover:bg-black transition-all shadow-xl uppercase tracking-widest text-xs flex items-center justify-center gap-2"
+                                    className="sm:flex-1 bg-organic-green-dark text-white font-black text-center py-5 rounded-2xl hover:bg-black transition-all shadow-xl uppercase tracking-widest text-xs flex items-center justify-center gap-2 active:scale-95"
                                 >
                                     ORDER FROM VENDOR
                                     <ShieldCheck className="w-4 h-4" />
@@ -614,16 +670,16 @@ const ProductDetailModal: FC<{ product: Product, onClose: () => void }> = ({ pro
                              ) : (
                                 <button 
                                     disabled
-                                    className="flex-1 bg-gray-200 text-gray-400 font-black text-center py-5 rounded-2xl cursor-not-allowed uppercase tracking-widest text-xs"
+                                    className="sm:flex-1 bg-gray-200 text-gray-400 font-black text-center py-5 rounded-2xl cursor-not-allowed uppercase tracking-widest text-xs"
                                 >
                                     VENDOR LINK UNAVAILABLE
                                 </button>
                              )}
                             <button 
                                 onClick={onClose}
-                                className="flex-1 bg-white text-gray-400 font-black border border-gray-200 py-5 rounded-2xl hover:bg-gray-50 transition-all uppercase tracking-widest text-xs"
+                                className="sm:flex-none px-6 bg-white text-gray-400 font-black border border-gray-200 py-5 rounded-2xl hover:bg-gray-50 transition-all uppercase tracking-widest text-xs"
                             >
-                                CLOSE ANALYSIS
+                                CLOSE
                             </button>
                         </div>
                     </div>
@@ -633,7 +689,11 @@ const ProductDetailModal: FC<{ product: Product, onClose: () => void }> = ({ pro
     );
 };
 
-const ProductCard: FC<{ product: Product, onClick: () => void }> = ({ product, onClick }) => (
+const ProductCard: FC<{ 
+    product: Product; 
+    onClick: () => void;
+    onOpenPreview?: (url: string, title?: string) => void;
+}> = ({ product, onClick, onOpenPreview }) => (
     <article 
         onClick={onClick}
         className="bg-white rounded-[2rem] shadow-sm hover:shadow-2xl transition-all duration-500 border border-gray-50 flex flex-col h-full overflow-hidden group cursor-pointer active:scale-[0.98]"
@@ -641,29 +701,44 @@ const ProductCard: FC<{ product: Product, onClick: () => void }> = ({ product, o
       <div className="relative overflow-hidden aspect-[4/3]">
         <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" loading="lazy" referrerPolicy="no-referrer" />
         
-        <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-2xl text-xs font-black text-organic-green shadow-sm flex items-center gap-2 border border-emerald-100">
+        <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-2xl text-xs font-black text-organic-green shadow-sm flex items-center gap-2 border border-emerald-100 z-10">
             <span className="w-2 h-2 rounded-full bg-organic-green animate-pulse"></span>
             ORGANIC PURITY: {product.purity}%
         </div>
 
         {product.isOfficial && (
-            <div className="absolute top-4 left-4 bg-organic-green text-white px-3 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-wider shadow-xl flex items-center gap-1.5">
+            <div className="absolute top-4 left-4 bg-organic-green text-white px-3 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-wider shadow-xl flex items-center gap-1.5 z-10">
                 <ShieldCheck className="w-3.5 h-3.5" />
                 OFFICIAL SOURCE
             </div>
         )}
 
         {product.isLocal && !product.isOfficial && (
-            <div className="absolute bottom-4 left-4 bg-blue-600/90 backdrop-blur-md text-white px-3 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-wider shadow-xl flex items-center gap-1.5 animate-in slide-in-from-left-2 duration-500">
+            <div className="absolute top-4 left-4 bg-blue-600/90 backdrop-blur-md text-white px-3 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-wider shadow-xl flex items-center gap-1.5 z-10 animate-in slide-in-from-left-2 duration-500">
                 <MapPin className="w-3 h-3" />
                 {product.location ? product.location : "Local Vendor"}
             </div>
         )}
+
+        {product.sourceUrl && onOpenPreview && (
+            <button
+                type="button"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenPreview(product.sourceUrl!, product.name);
+                }}
+                className="absolute bottom-4 right-4 bg-slate-900/85 hover:bg-slate-900 text-white px-3 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-wider shadow-xl flex items-center gap-1.5 transition-all hover:scale-105 z-10"
+                title="Preview live site inside Search For Organics"
+            >
+                <Eye className="w-3 h-3 text-emerald-400" />
+                <span>Preview Site</span>
+            </button>
+        )}
         
-        {product.criticism && (
-            <div className="absolute bottom-4 right-4 bg-amber-600/90 backdrop-blur-md text-white px-3 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-wider shadow-xl flex items-center gap-1.5 animate-in slide-in-from-right-2 duration-500">
+        {product.criticism && !product.sourceUrl && (
+            <div className="absolute bottom-4 right-4 bg-amber-600/90 backdrop-blur-md text-white px-3 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-wider shadow-xl flex items-center gap-1.5 animate-in slide-in-from-right-2 duration-500 z-10">
                 <Globe className="w-3 h-3" />
-                AI-Generated critique based on search information
+                AI Critique Available
             </div>
         )}
       </div>
@@ -705,29 +780,56 @@ const ProductCard: FC<{ product: Product, onClick: () => void }> = ({ product, o
           ))}
         </div>
 
-        <div className="mt-auto pt-6 border-t border-gray-50 flex justify-between items-end">
+        <div className="mt-auto pt-6 border-t border-gray-50 flex justify-between items-end gap-2">
             <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-2xl font-black text-organic-green-dark">{product.price}</span>
                     {product.sourceUrl && (
+                        <div className="flex items-center gap-1">
+                            {onOpenPreview && (
+                                <LinkPreviewButton 
+                                    url={product.sourceUrl} 
+                                    title={product.name} 
+                                    variant="pill" 
+                                    onOpenPreview={onOpenPreview} 
+                                />
+                            )}
+                            <a 
+                                href={product.sourceUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                onClick={(e) => e.stopPropagation()}
+                                className="p-1.5 bg-emerald-50 text-organic-green rounded-xl hover:bg-organic-green hover:text-white transition-all text-[10px] font-black uppercase tracking-wider border border-emerald-200"
+                                title="Open Real Producer Website in New Tab"
+                            >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                        </div>
+                    )}
+                    {product.googleSearchUrl && (
                         <a 
-                            href={product.sourceUrl} 
+                            href={product.googleSearchUrl} 
                             target="_blank" 
                             rel="noopener noreferrer" 
                             onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-organic-green rounded-xl hover:bg-organic-green hover:text-white transition-all text-[10px] font-black uppercase tracking-wider border border-emerald-200 group/link"
-                            title="Open Real Producer Website"
+                            className="p-1.5 bg-blue-50/80 hover:bg-blue-600 text-blue-700 hover:text-white rounded-xl transition-all text-[10px] font-black uppercase tracking-wider border border-blue-200/80 flex items-center gap-1 shadow-2xs"
+                            title="Verify on Google Search"
                         >
-                            <Globe className="w-3 h-3 group-hover/link:animate-spin-once" />
-                            Live Link
+                            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 shrink-0">
+                                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.86c2.26-2.09 3.685-5.17 3.685-9.09z" />
+                                <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.37 24 12 24z" />
+                                <path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z" />
+                                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z" />
+                            </svg>
+                            <span className="hidden sm:inline">Google</span>
                         </a>
                     )}
                 </div>
                 <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest mt-0.5">{product.shippingPrice}</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
                 <BookmarkButton product={product} variant="icon" />
-                <button className="bg-organic-green group-hover:bg-organic-green-dark text-white text-xs font-black py-3 px-6 rounded-2xl transition-all shadow-lg">
+                <button className="bg-organic-green group-hover:bg-organic-green-dark text-white text-xs font-black py-3 px-5 rounded-2xl transition-all shadow-lg active:scale-95">
                     DETAILS
                 </button>
             </div>
@@ -1293,6 +1395,8 @@ const App: FC = () => {
   const [showApiModal, setShowApiModal] = useState(false);
   const [geminiApiKey, setGeminiApiKey] = useState<string>(() => localStorage.getItem('gemini_api_key') || '');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [activeLinkPreview, setActiveLinkPreview] = useState<{ url: string; title?: string } | null>(null);
+  const [googleSearchData, setGoogleSearchData] = useState<GoogleSearchData | null>(null);
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [isOsintModalOpen, setIsOsintModalOpen] = useState(false);
 
@@ -1405,6 +1509,7 @@ const App: FC = () => {
     setSearchQuery(query);
     setSearchResults([]);
     setVeganAlternatives([]);
+    setGoogleSearchData(null);
     setIsNonVeganSearch(false);
     setNonVeganReason('');
     setDirectoryResult(null);
@@ -1449,6 +1554,7 @@ const App: FC = () => {
       setVeganAlternatives(response.veganAlternatives || []);
       setIsNonVeganSearch(response.isNonVeganSearch || false);
       setNonVeganReason(response.nonVeganReason || '');
+      setGoogleSearchData(response.googleSearchData || null);
 
       if (user) {
         await saveSearchToMemory(user.uid, query, (response.products || []).length);
@@ -1925,9 +2031,34 @@ const App: FC = () => {
 
                      {searchResults.length > 0 && (
                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                            {/* Google Search Grounded & Verified Data Panel */}
+                            {googleSearchData && (
+                                <GoogleSearchDataPanel 
+                                    data={googleSearchData}
+                                    query={searchQuery}
+                                    onSearchQuery={(q) => handleSearch(q)}
+                                    onOpenPreview={(url, title) => setActiveLinkPreview({ url, title })}
+                                />
+                            )}
+
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-6">
                                 <div>
-                                    <h2 className="text-3xl font-black text-organic-green-dark tracking-tighter uppercase">Market Results</h2>
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                        <h2 className="text-3xl font-black text-organic-green-dark tracking-tighter uppercase">Market Results</h2>
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-50 text-blue-900 text-[10px] font-black uppercase tracking-wider border border-blue-200 shadow-xs">
+                                            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 shrink-0">
+                                                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.86c2.26-2.09 3.685-5.17 3.685-9.09z" />
+                                                <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.37 24 12 24z" />
+                                                <path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z" />
+                                                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z" />
+                                            </svg>
+                                            Google Search Data Active
+                                        </span>
+                                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-emerald-50 text-emerald-800 text-[10px] font-black uppercase tracking-wider border border-emerald-200 shadow-xs">
+                                            <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                                            Link Previews Active
+                                        </span>
+                                    </div>
                                     <p className="text-sm font-black text-gray-400 uppercase tracking-widest mt-1">Found {searchResults.length} verified organic sources</p>
                                 </div>
                                 <div className="flex gap-3">
@@ -1954,6 +2085,7 @@ const App: FC = () => {
                                         key={product.id} 
                                         product={product} 
                                         onClick={() => setSelectedProduct(product)} 
+                                        onOpenPreview={(url, title) => setActiveLinkPreview({ url, title })}
                                     />
                                 ))}
                             </div>
@@ -1966,6 +2098,7 @@ const App: FC = () => {
                                     isNonVeganSearch={isNonVeganSearch}
                                     nonVeganReason={nonVeganReason}
                                     onSearchAlternative={(altName) => handleSearch(altName)}
+                                    onOpenPreview={(url, title) => setActiveLinkPreview({ url, title })}
                                 />
                             )}
 
@@ -1978,21 +2111,60 @@ const App: FC = () => {
                                     </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                         {groundingSources.map((source, i) => (
-                                            <a 
+                                            <div 
                                                 key={i} 
-                                                href={source.uri} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer"
-                                                className="group p-5 rounded-2xl border border-gray-50 bg-gray-50/30 hover:bg-white hover:border-organic-green/20 transition-all flex items-start gap-4 shadow-sm hover:shadow-lg"
+                                                className="group p-5 rounded-2xl border border-gray-100 bg-white hover:border-organic-green/40 transition-all flex flex-col justify-between shadow-xs hover:shadow-lg relative"
                                             >
-                                                <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm group-hover:bg-organic-green group-hover:text-white transition-colors flex-shrink-0">
-                                                    {source.type === 'maps' ? <MapPin className="w-5 h-5" /> : <Globe className="w-5 h-5" />}
+                                                <div className="flex items-start gap-4 mb-3">
+                                                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-organic-green flex items-center justify-center shadow-xs group-hover:bg-organic-green group-hover:text-white transition-colors flex-shrink-0">
+                                                        {source.uri.includes('google.com') ? (
+                                                            <svg viewBox="0 0 24 24" className="w-5 h-5">
+                                                                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.86c2.26-2.09 3.685-5.17 3.685-9.09z" />
+                                                                <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.37 24 12 24z" />
+                                                                <path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z" />
+                                                                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z" />
+                                                            </svg>
+                                                        ) : source.type === 'maps' ? <MapPin className="w-5 h-5" /> : <Globe className="w-5 h-5" />}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center justify-between gap-1 mb-1">
+                                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{source.type}</p>
+                                                            {source.uri.includes('google.com') ? (
+                                                                <span className="text-[9px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                                                    GOOGLE SEARCH
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-[9px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                                                                    VERIFIED
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs font-black text-gray-800 line-clamp-2 leading-snug group-hover:text-organic-green transition-colors">{source.title}</p>
+                                                        <p className="text-[10px] text-gray-400 font-mono truncate mt-1">{source.uri}</p>
+                                                    </div>
                                                 </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{source.type}</p>
-                                                    <p className="text-xs font-black text-gray-800 line-clamp-2 leading-snug group-hover:text-organic-green transition-colors">{source.title}</p>
+
+                                                <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 mt-auto">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setActiveLinkPreview({ url: source.uri, title: source.title })}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-organic-green text-emerald-800 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border border-emerald-200/80 shadow-xs active:scale-95"
+                                                    >
+                                                        <Eye className="w-3 h-3 text-emerald-600 group-hover:text-white" />
+                                                        <span>Preview Source</span>
+                                                    </button>
+
+                                                    <a
+                                                        href={source.uri}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-flex items-center gap-1 text-[10px] font-black text-gray-500 hover:text-organic-green uppercase tracking-wider p-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+                                                        title="Open source in new tab"
+                                                    >
+                                                        <ExternalLink className="w-3.5 h-3.5" />
+                                                    </a>
                                                 </div>
-                                            </a>
+                                            </div>
                                         ))}
                                     </div>
                                 </div>
@@ -2017,6 +2189,10 @@ const App: FC = () => {
             {currentTab === 'wholesale' && <WholesaleB2B />}
             {currentTab === 'swap' && <ProduceSwap />}
             {currentTab === 'tips' && <OrganicTips onNavigateTab={(tab) => { setCurrentTab(tab as TabType); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />}
+            {currentTab === 'versionLog' && <VersionLog />}
+            {currentTab === 'farmMap' && <FarmMapExplorer userLocation={userLocation} />}
+            {currentTab === 'aiNutrition' && <AiNutritionScanner />}
+            {currentTab === 'ecoImpact' && <EcoImpactDashboard />}
             {currentTab === 'devApi' && <DeveloperApi />}
             {currentTab === 'audit' && <BusinessAudit apiKey={geminiApiKey} />}
             {currentTab === 'calc' && <EcoCalc apiKey={geminiApiKey} />}
@@ -2123,8 +2299,17 @@ const App: FC = () => {
           <ProductDetailModal 
             product={selectedProduct} 
             onClose={() => setSelectedProduct(null)} 
+            onOpenPreview={(url, title) => setActiveLinkPreview({ url, title })}
           />
       )}
+
+      {/* Global In-App Link Preview Inspector Modal for Search Results */}
+      <LinkPreviewModal 
+        isOpen={!!activeLinkPreview} 
+        url={activeLinkPreview?.url || null} 
+        initialTitle={activeLinkPreview?.title} 
+        onClose={() => setActiveLinkPreview(null)} 
+      />
 
       {currentTab !== 'chat' && (
         <BobAssistant 

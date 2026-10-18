@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { 
   Sparkles, Leaf, ShieldCheck, Heart, ArrowRight, 
   ExternalLink, CheckCircle2, AlertTriangle, Bookmark, 
-  Tag, Info, Check, RefreshCw
+  Tag, Info, Check, RefreshCw, Eye
 } from 'lucide-react';
 import { VeganAlternative, Product } from '../../types';
 import { useAuth } from '../context/AuthContext';
@@ -17,6 +17,7 @@ interface VeganAlternativesSectionProps {
   nonVeganReason?: string;
   onSelectAlternative?: (alt: VeganAlternative) => void;
   onSearchAlternative?: (name: string) => void;
+  onOpenPreview?: (url: string, title?: string) => void;
 }
 
 export const VeganAlternativesSection: React.FC<VeganAlternativesSectionProps> = ({
@@ -25,7 +26,8 @@ export const VeganAlternativesSection: React.FC<VeganAlternativesSectionProps> =
   isNonVeganSearch,
   nonVeganReason,
   onSelectAlternative,
-  onSearchAlternative
+  onSearchAlternative,
+  onOpenPreview
 }) => {
   const { privateSettings, openPrivateSettingsModal } = useAuth();
 
@@ -218,10 +220,19 @@ export const VeganAlternativesSection: React.FC<VeganAlternativesSectionProps> =
                   {onSearchAlternative && (
                     <button
                       onClick={() => onSearchAlternative(alt.name)}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md shadow-emerald-600/20 active:scale-95"
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md shadow-emerald-600/20 active:scale-95"
                     >
                       <span>Search This</span>
                       <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {alt.sourceUrl && onOpenPreview && (
+                    <button
+                      onClick={() => onOpenPreview(alt.sourceUrl!, alt.name)}
+                      className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl transition-colors border border-emerald-200"
+                      title="Preview vendor link in-app"
+                    >
+                      <Eye className="w-4 h-4 text-emerald-700" />
                     </button>
                   )}
                   {alt.sourceUrl && (
@@ -230,7 +241,7 @@ export const VeganAlternativesSection: React.FC<VeganAlternativesSectionProps> =
                       target="_blank"
                       rel="noopener noreferrer"
                       className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors"
-                      title="View vendor / source"
+                      title="View vendor / source in new tab"
                     >
                       <ExternalLink className="w-4 h-4" />
                     </a>

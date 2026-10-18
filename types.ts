@@ -62,6 +62,18 @@ export interface VeganAlternative {
   replacesProduct?: string; // what non-vegan item it replaces
 }
 
+export interface GoogleSearchData {
+  isGoogleSearchGrounded: boolean;
+  searchQueries: string[];
+  primaryGoogleSearchUrl: string;
+  googleShoppingUrl: string;
+  googleMapsUrl: string;
+  googleResultsCount: number;
+  googleIndexedSources: GroundingSource[];
+  relatedSearches?: string[];
+  lastIndexedAt?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -76,11 +88,29 @@ export interface Product {
   isOfficial?: boolean;
   imageUrl?: string; 
   sourceUrl?: string;
+  googleSearchUrl?: string;
+  googleShoppingUrl?: string;
   nutrition?: NutritionInfo;
   criticism?: string;
   isVegan?: boolean;
   animalIngredientsFound?: string[]; // e.g. ["Dairy / Whey", "Tallow", "Gelatin", "Beeswax", "Egg White"]
   containsAllergens?: string[]; // e.g. ["Dairy", "Gluten", "Soy", "Peanuts", "Eggs"]
+}
+
+export interface LinkPreviewData {
+  url: string;
+  domain: string;
+  hostname: string;
+  title: string;
+  description: string;
+  image?: string;
+  favicon?: string;
+  siteName?: string;
+  isHttps: boolean;
+  iframeAllowed: boolean;
+  trustBadge?: string;
+  category?: string;
+  status: number;
 }
 
 export interface SearchResponse {
@@ -89,6 +119,7 @@ export interface SearchResponse {
   isNonVeganSearch?: boolean;
   nonVeganReason?: string;
   veganAlternatives?: VeganAlternative[];
+  googleSearchData?: GoogleSearchData;
 }
 
 export interface UserLocation {

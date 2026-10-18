@@ -582,35 +582,7 @@ export const CommunityHub: React.FC = () => {
   useEffect(() => {
     if (!activeGroup) return;
     const unsub = subscribeGroupMessages(activeGroup.id, (msgs) => {
-      if (msgs.length > 0) {
-        setGroupMessages(msgs);
-      } else {
-        // Provide starter welcoming seed messages for rich immediate feel
-        setGroupMessages([
-          {
-            id: 'mock-1',
-            groupId: activeGroup.id,
-            senderUid: 'seed_admin_1',
-            senderName: 'Dr. Arthur Vance',
-            senderUsername: 'arthur_vance_lab',
-            senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-            senderRole: 'Chemist / Lab Scientist',
-            text: `Welcome everyone to the ${activeGroup.name} channel! Feel free to share verified test data, harvest questions, and collaboration opportunities.`,
-            timestamp: { seconds: Date.now() / 1000 - 3600 * 8 }
-          },
-          {
-            id: 'mock-2',
-            groupId: activeGroup.id,
-            senderUid: 'seed_author_2',
-            senderName: 'Elena Rostova',
-            senderUsername: 'elena_biodynamic',
-            senderAvatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80',
-            senderRole: 'Certified Farmer',
-            text: `Excited to be collaborating with everyone here. We just finished our quarterly soil microbial respiration assays and are seeing great results.`,
-            timestamp: { seconds: Date.now() / 1000 - 3600 * 2 }
-          }
-        ]);
-      }
+      setGroupMessages(msgs);
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     });
     return () => unsub();

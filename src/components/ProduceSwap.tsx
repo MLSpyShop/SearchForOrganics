@@ -6,63 +6,16 @@ import {
 } from 'lucide-react';
 import { ProduceSwapListing } from '../../types';
 
-const SAMPLE_SWAPS: ProduceSwapListing[] = [
-  {
-    id: 'swap-1',
-    title: 'Surplus Organic Meyer Lemons (15 lbs)',
-    gardenerName: 'Sarah Jenkins',
-    location: 'North Ballard, Seattle, WA',
-    distanceMiles: 2.4,
-    type: 'Surplus Produce',
-    organicGrowingMethod: 'Zero-Spray Permaculture Food Forest (Compost Tea Fed)',
-    description: 'Our backyard tree produced an abundance of ripe, aromatic organic Meyer lemons! Perfect for juicing, preserving, or baking.',
-    lookingInExchange: 'Looking for sourdough bread, fresh herbs (rosemary/thyme), or heirloom tomato seedlings.',
-    postedDate: '2 hours ago',
-    contactEmail: 'sarah.j.permaculture@gmail.com'
-  },
-  {
-    id: 'swap-2',
-    title: 'Cherokee Purple & Brandywine Heirloom Seeds',
-    gardenerName: 'David Chen',
-    location: 'Phinney Ridge, Seattle, WA',
-    distanceMiles: 3.8,
-    type: 'Heirloom Seeds',
-    organicGrowingMethod: 'Certified Seed Saver (5-Year Open-Pollinated Strain)',
-    description: 'Carefully fermented and dried non-GMO heirloom tomato seeds from our 2025 prize crop. 98% germination rate.',
-    lookingInExchange: 'Open to rare heritage pole bean seeds, purple bell peppers, or garlic cloves.',
-    postedDate: 'Yesterday',
-    contactEmail: 'david.seedsaves@proton.me'
-  },
-  {
-    id: 'swap-3',
-    title: '150-Year-Old San Francisco Sourdough Starter Culture',
-    gardenerName: 'Chef Mateo',
-    location: 'Fremont, Seattle, WA',
-    distanceMiles: 1.9,
-    type: 'Fermentation Starter',
-    organicGrowingMethod: 'Fed exclusively with organic sprouted rye & stoneground wheat',
-    description: 'Vigorous, ultra-active wild lactobacillus sourdough culture with deep complex sour notes. Comes with easy feeding guide jar.',
-    lookingInExchange: 'Free gift to any aspiring organic baker, or trade for home-canned organic jam/honey.',
-    postedDate: '3 days ago',
-    contactEmail: 'mateo.bakes@gmail.com'
-  },
-  {
-    id: 'swap-4',
-    title: 'Organic Lacinato Kale & Rainbow Chard Seedlings',
-    gardenerName: 'Greenwood Community Garden',
-    location: 'Greenwood, Seattle, WA',
-    distanceMiles: 4.1,
-    type: 'Live Seedlings',
-    organicGrowingMethod: 'Started in organic worm-castings potting mix under LED lights',
-    description: '12 robust kale and Swiss chard starts in compostable peat pots ready for garden soil planting.',
-    lookingInExchange: 'Free community giveaway or trade for organic potting soil / coffee chaff.',
-    postedDate: '4 days ago',
-    contactEmail: 'greenwood.gardeners@gmail.com'
-  }
-];
-
 export const ProduceSwap: React.FC = () => {
-  const [swaps, setSwaps] = useState<ProduceSwapListing[]>(SAMPLE_SWAPS);
+  const [swaps, setSwaps] = useState<ProduceSwapListing[]>(() => {
+    try {
+      const saved = localStorage.getItem('user_produce_swaps');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // fallback
+    }
+    return [];
+  });
   const [selectedType, setSelectedType] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showPostModal, setShowPostModal] = useState<boolean>(false);
@@ -95,7 +48,7 @@ export const ProduceSwap: React.FC = () => {
       title: newTitle.trim(),
       gardenerName: newName.trim(),
       location: newLocation.trim() || 'Neighborhood Local',
-      distanceMiles: 1.5,
+      distanceMiles: 1.0,
       type: newType,
       organicGrowingMethod: newMethod,
       description: newDesc.trim() || 'Organic backyard harvest ready for trade.',
@@ -104,11 +57,16 @@ export const ProduceSwap: React.FC = () => {
       contactEmail: newEmail.trim()
     };
 
-    setSwaps([newListing, ...swaps]);
+    const updated = [newListing, ...swaps];
+    setSwaps(updated);
+    try {
+      localStorage.setItem('user_produce_swaps', JSON.stringify(updated));
+    } catch {}
     setShowPostModal(false);
     // Reset
     setNewTitle('');
     setNewName('');
+    setNewLocation('');
     setNewDesc('');
     setNewExchange('');
     setNewEmail('');
@@ -169,62 +127,80 @@ export const ProduceSwap: React.FC = () => {
       </div>
 
       {/* Swap Listings Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {filteredSwaps.map(swap => (
-          <div
-            key={swap.id}
-            className="bg-white p-7 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+      {filteredSwaps.length === 0 ? (
+        <div className="bg-white rounded-[2.5rem] p-12 text-center border border-gray-100 shadow-sm space-y-4 max-w-xl mx-auto">
+          <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto text-emerald-600">
+            <Leaf className="w-8 h-8" />
+          </div>
+          <h3 className="text-xl font-black text-gray-900">No Active Local Listings Yet</h3>
+          <p className="text-sm text-gray-500 font-medium">
+            Be the first local grower or gardener to share backyard organic produce surplus, heirloom seeds, or active sourdough starter cultures.
+          </p>
+          <button
+            onClick={() => setShowPostModal(true)}
+            className="px-6 py-3 bg-emerald-800 hover:bg-emerald-900 text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg transition-all"
           >
-            <div className="space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-200">
-                  {swap.type}
-                </span>
-                <span className="text-[10px] text-gray-400 font-bold">{swap.postedDate}</span>
-              </div>
+            + Post First Exchange
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {filteredSwaps.map(swap => (
+            <div
+              key={swap.id}
+              className="bg-white p-7 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+            >
+              <div className="space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    {swap.type}
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-bold">{swap.postedDate}</span>
+                </div>
 
-              <div>
-                <h4 className="text-xl font-black text-gray-900 leading-snug">{swap.title}</h4>
-                <p className="text-xs font-bold text-emerald-800 mt-1 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-gray-400" /> {swap.location} ({swap.distanceMiles} miles away)
+                <div>
+                  <h4 className="text-xl font-black text-gray-900 leading-snug">{swap.title}</h4>
+                  <p className="text-xs font-bold text-emerald-800 mt-1 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-gray-400" /> {swap.location} ({swap.distanceMiles} miles away)
+                  </p>
+                </div>
+
+                <div className="p-3 bg-emerald-50/40 rounded-2xl border border-emerald-100/60 text-[11px] text-emerald-950 font-medium">
+                  🌱 <strong>Growing Method:</strong> {swap.organicGrowingMethod}
+                </div>
+
+                <p className="text-xs text-gray-600 leading-relaxed font-medium">
+                  {swap.description}
                 </p>
+
+                <div className="p-3.5 bg-gray-50 rounded-2xl border border-gray-100 text-xs">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">Looking In Exchange:</p>
+                  <p className="text-gray-800 font-bold mt-0.5">{swap.lookingInExchange}</p>
+                </div>
               </div>
 
-              <div className="p-3 bg-emerald-50/40 rounded-2xl border border-emerald-100/60 text-[11px] text-emerald-950 font-medium">
-                🌱 <strong>Growing Method:</strong> {swap.organicGrowingMethod}
-              </div>
-
-              <p className="text-xs text-gray-600 leading-relaxed font-medium">
-                {swap.description}
-              </p>
-
-              <div className="p-3.5 bg-gray-50 rounded-2xl border border-gray-100 text-xs">
-                <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">Looking In Exchange:</p>
-                <p className="text-gray-800 font-bold mt-0.5">{swap.lookingInExchange}</p>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
-              <span className="text-xs text-gray-500 font-medium">Gardener: <strong>{swap.gardenerName}</strong></span>
-              <button
-                onClick={() => setContactSuccess(swap.id)}
-                className="px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl font-bold text-xs uppercase flex items-center gap-1.5 transition-colors"
-              >
-                <Mail className="w-3.5 h-3.5" /> Message Gardener
-              </button>
-            </div>
-
-            {contactSuccess === swap.id && (
-              <div className="p-3 bg-emerald-950 text-white rounded-xl text-xs flex items-center justify-between animate-in fade-in">
-                <span>Direct contact: <strong className="text-emerald-300">{swap.contactEmail}</strong></span>
-                <button onClick={() => setContactSuccess(null)} className="text-gray-400 hover:text-white">
-                  <X className="w-3.5 h-3.5" />
+              <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+                <span className="text-xs text-gray-500 font-medium">Gardener: <strong>{swap.gardenerName}</strong></span>
+                <button
+                  onClick={() => setContactSuccess(swap.id)}
+                  className="px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl font-bold text-xs uppercase flex items-center gap-1.5 transition-colors"
+                >
+                  <Mail className="w-3.5 h-3.5" /> Message Gardener
                 </button>
               </div>
-            )}
-          </div>
-        ))}
-      </div>
+
+              {contactSuccess === swap.id && (
+                <div className="p-3 bg-emerald-950 text-white rounded-xl text-xs flex items-center justify-between animate-in fade-in">
+                  <span>Direct contact: <strong className="text-emerald-300">{swap.contactEmail}</strong></span>
+                  <button onClick={() => setContactSuccess(null)} className="text-gray-400 hover:text-white">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Post Swap Listing Modal */}
       {showPostModal && (
